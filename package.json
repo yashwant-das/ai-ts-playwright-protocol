@@ -1,5 +1,5 @@
 {
-  "name": "test-playwright-protocol",
+  "name": "ai-ts-playwright-protocol",
   "version": "2.1.1",
   "description": "Smart Playwright Protocol (SPP): A protocol-driven workflow for Playwright automation with file-backed tasks and automated quality gates.",
   "engines": {
