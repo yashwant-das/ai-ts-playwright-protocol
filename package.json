@@ -42,6 +42,7 @@
     "picocolors": "^1.1.1",
     "ts-morph": "^28.0.0",
     "ts-node": "^10.9.2",
+    "tsx": "^4.23.15",
     "typescript": "5.3.3",
     "typescript-eslint": "^8.60.0",
     "zod": "^4.4.3"

@@ -7,23 +7,23 @@ import { BasePage } from '../BasePage';
  */
 export class Sidebar extends BasePage {
   /**
-   * @selector #react-burger-menu-btn
-   * @strategy id
-   * @verified false
+   * @selector name="Open Menu"
+   * @strategy getByRole
+   * @verified 2026-09-26
    */
   readonly hamburgerMenuButton: Locator;
 
   /**
-   * @selector [data-test="logout-sidebar-link"]
-   * @strategy id
-   * @verified false
+   * @selector name="Logout"
+   * @strategy getByRole
+   * @verified 2026-09-26
    */
   readonly logoutButton: Locator;
 
   constructor(page: Page) {
     super(page);
-    this.hamburgerMenuButton = page.locator('#react-burger-menu-btn');
-    this.logoutButton = page.locator('[data-test="logout-sidebar-link"]');
+    this.hamburgerMenuButton = page.getByRole('button', { name: 'Open Menu' });
+    this.logoutButton = page.getByRole('button', { name: 'Logout' });
   }
 
   /**
