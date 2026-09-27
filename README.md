@@ -99,3 +99,7 @@ npm run task T-001
 | [docs/CLI.md](docs/CLI.md) | **Command reference**: tools, menu, board, and troubleshooting. |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Future enhancements and planned improvements. |
 | [AGENTS.md](AGENTS.md) | Lightweight instructions for AI assistants. |
+
+## License
+
+MIT. See [LICENSE](LICENSE).
