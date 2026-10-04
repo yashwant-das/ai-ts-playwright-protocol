@@ -1,19 +1,20 @@
 {
   "name": "ai-ts-playwright-protocol",
-  "version": "2.1.1",
+  "version": "3.0.0",
   "license": "MIT",
   "description": "Smart Playwright Protocol (SPP): A protocol-driven workflow for Playwright automation with file-backed tasks and automated quality gates.",
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   },
   "scripts": {
     "test": "playwright test",
     "lint:code": "eslint 'pages/**/*.ts' 'tests/**/*.ts' 'scripts/**/*.ts' 'mcp/**/*.ts'",
-    "lint:md": "markdownlint '**/*.md' --ignore node_modules --ignore playwright-report --ignore test-results",
+    "lint:md": "markdownlint '**/*.md' --ignore node_modules --ignore playwright-report --ignore test-results --ignore .claude --ignore .agents --ignore .github/agents --ignore .opencode",
     "lint": "npm run lint:code && npm run lint:md",
     "task": "ts-node scripts/task.ts",
     "mcp": "NODE_OPTIONS='--disable-warning=DEP0205' npx tsx mcp/server.ts",
-    "prepare": "husky"
+    "prepare": "husky",
+    "agents": "tsx scripts/agents.ts"
   },
   "lint-staged": {
     "pages/**/*.ts": [
@@ -27,7 +28,7 @@
   "devDependencies": {
     "@clack/prompts": "^1.5.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "@playwright/test": "^1.60.0",
+    "@playwright/test": "1.63.0",
     "@types/clipboardy": "^1.1.0",
     "@types/node": "^20.19.41",
     "clipboardy": "^2.3.0",
