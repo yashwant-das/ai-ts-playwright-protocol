@@ -255,7 +255,7 @@ When verification fails:
 2. Find the root cause with evidence:
    - the **healer** agent, which replays the failing test, inspects the page and patches the test; or
    - `npx playwright test <file> --debug=cli`, then `npx playwright cli attach` to inspect the paused page; and/or
-   - `npx playwright trace open <trace.zip>` for traces captured on CI retries.
+   - `npx playwright trace open <trace.zip>` for traces captured on retries.
 3. Apply the smallest possible fix. Selector fixes go into Page Objects, not specs.
 4. Re-run verification.
 
@@ -376,7 +376,7 @@ Fast, local validation:
 npm run task <TASK_ID>
 ```
 
-Runs the static checks, `npm run lint` and the task's test. CI runs `npm run lint` and the full suite on every push and pull request.
+Runs the static checks, `npm run lint` and the task's test, locally. Tests are not run in CI: CI runs `npm run lint` and `npx playwright test --list` (specs load, no browser) on every push and pull request.
 
 ---
 

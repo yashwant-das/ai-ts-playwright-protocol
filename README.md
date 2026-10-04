@@ -3,7 +3,6 @@
 Smart Playwright Protocol (SPP): a file-backed workflow for writing Playwright tests in TypeScript with an AI assistant, where every task passes the same verification gate before it counts as done.
 
 [![Verify](https://github.com/yashwant-das/ai-ts-playwright-protocol/actions/workflows/verify.yml/badge.svg)](https://github.com/yashwant-das/ai-ts-playwright-protocol/actions/workflows/verify.yml)
-[![Test report](https://img.shields.io/badge/report-latest%20CI%20run-blue)](https://github.com/yashwant-das/ai-ts-playwright-protocol/actions/workflows/verify.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Playwright](https://img.shields.io/badge/Playwright-1.63-2EAD33?logo=playwright&logoColor=white)](https://playwright.dev)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
@@ -68,11 +67,11 @@ The Playwright agents, skills and MCP configuration are committed, so they work 
 
 ## Test reports and results
 
-- CI runs lint (ESLint and markdownlint) and the Playwright suite on every push and pull request to `main`.
-- The Playwright HTML report from each run is attached to the run as the `playwright-report` artifact: open the [latest Verify run](https://github.com/yashwant-das/ai-ts-playwright-protocol/actions/workflows/verify.yml) and download it.
-- Locally, `npx playwright show-report` opens the last run's report.
+- Tests run **locally only**: `npm test` for the suite, `npm run task <TASK_ID>` for one task's gate. SPP work is driven by an AI assistant on your machine, so CI does not install browsers or run tests.
+- CI runs the static checks on every push and pull request to `main`: lint (ESLint and markdownlint) and `npx playwright test --list`, which confirms every spec, fixture and Page Object loads.
+- `npx playwright show-report` opens the last local run's HTML report.
 
-The tests run against the public Sauce Demo site, so CI retries each test up to twice.
+The tests run against the public Sauce Demo site, so each failing test is retried once and a trace is kept for the retry.
 
 ## Tech stack
 

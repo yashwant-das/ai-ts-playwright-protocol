@@ -75,6 +75,11 @@ Purpose: Adopt Playwright 1.63's agent tooling and make SPP the contract around 
 - **Status:** COMPLETED
 - **Goal:** Add `tests/fixtures.ts` and the default and guest seed tests.
 
+### Local-Only Test Runs
+
+- **Status:** COMPLETED
+- **Goal:** CI runs static checks only (lint and `playwright test --list`); the Playwright suite runs locally, where the AI-driven workflow happens.
+
 ## Backlog
 
 ### Migrate Existing Specs to Fixtures

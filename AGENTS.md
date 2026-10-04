@@ -20,7 +20,7 @@ Before starting any work:
 3. Use the Playwright tooling in this repo (all version-matched to `@playwright/test`):
    - **Agent CLI:** `npx playwright cli` (skill: `playwright-cli`) for exploration and locators.
    - **Test Agents:** `playwright-test-planner`, `playwright-test-generator`, `playwright-test-healer`.
-   - **Trace CLI:** `npx playwright trace` (skill: `playwright-trace`) for CI failures.
+   - **Trace CLI:** `npx playwright trace` (skill: `playwright-trace`) to inspect failure traces.
 
 ## Workflow Guidance
 
