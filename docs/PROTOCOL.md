@@ -1,4 +1,4 @@
-# Smart Playwright Protocol (SPP) v2.1.1
+# Smart Playwright Protocol (SPP) v3.0.0
 
 ## Architecture & Design Principles
 
@@ -6,31 +6,30 @@
 
 ## Vision
 
-Smart Playwright Protocol (SPP) is a lightweight, protocol-driven workflow for AI-assisted Playwright automation.
+Smart Playwright Protocol (SPP) is a protocol-driven workflow for AI-assisted Playwright automation.
 
-The goal is not autonomous testing.
+Playwright now ships its own agent tooling: a token-efficient browser CLI, agent skills, and the planner, generator and healer Test Agents. SPP does not compete with that tooling. It puts a contract around it.
 
-The goal is to create a repeatable, reviewable, and verifiable workflow that allows humans and AI assistants to collaborate on test automation with predictable outcomes.
+**SPP is the contract; Playwright's agents are the workforce.**
+
+- Playwright's agents decide _how_ to explore an app, write a test, or repair one.
+- SPP decides _what_ is being built (the task file), _how it must be built_ (Page Objects, business assertions), and _when it is done_ (the verification gate).
 
 SPP prioritizes:
 
-- Simplicity
-- Correctness
 - Verification
 - Traceability
-- Human review
-
-SPP intentionally avoids complex orchestration, multi-agent systems, autonomous execution loops, and heavy infrastructure.
+- Maintainable test architecture
+- Human review where judgement is needed
+- Using the latest Playwright capabilities rather than re-implementing them
 
 ---
 
 ## Core Philosophy
 
-The protocol is the product.
+The protocol is the product. Agents may do most of the work, but only the verification gate moves a task to `DONE`.
 
-Everything else exists to support the protocol.
-
-The framework is built around a single workflow:
+Every task follows one workflow:
 
 ```text
 Select
@@ -43,12 +42,14 @@ Plan
   ↓
 Implement
   ↓
+Promote
+  ↓
 Verify
   ├─ PASS → DONE
   └─ FAIL → BLOCKED → Recover → Verify
 ```
 
-This mirrors how experienced SDETs approach automation work.
+This mirrors how experienced SDETs approach automation work, with each phase now backed by a Playwright tool.
 
 ---
 
@@ -58,93 +59,74 @@ This mirrors how experienced SDETs approach automation work.
 
 #### 1. Protocol
 
-The protocol defines how work is performed.
-
-Responsibilities:
-
-- Define workflow
-- Define task states
-- Define quality expectations
-- Define recovery process
-
-The protocol remains stable over time.
+Defines the workflow, task states, quality rules and recovery process. This document is the source of truth.
 
 ---
 
 #### 2. Task Files
 
-Task files are Markdown documents stored in:
-
-```text
-tasks/ 
-```
-
-Task files are the source of truth for work.
+Markdown documents in `tasks/`, one per unit of work. They are the source of truth for _what_ is being built.
 
 Responsibilities:
 
-- Define objective
-- Define context
+- Define objective and business context
 - Define acceptance criteria
-- Track status
+- Link the test plan (`specs/`) and test file
+- Track status and block reason
 
-Tasks are intentionally file-based.
-
-Benefits:
-
-- Human readable
-- AI readable
-- Git friendly
-- No database required
+Tasks stay file-based: human readable, AI readable, Git friendly, no database.
 
 ---
 
-#### 3. CLI
+#### 3. Test Plans (`specs/`)
 
-The CLI is the operational interface.
-
-Responsibilities:
-
-- Create tasks
-- Activate tasks
-- Verify tasks
-- Display task board
-- Generate AI handoff prompts
-- Generate recovery prompts
-
-The CLI owns workflow execution.
+Markdown test plans produced in the Plan phase, usually by the Playwright planner agent. Each task links at most one plan through its `- **Spec:**` line. The task holds the business view (Understanding, Acceptance Criteria); the plan holds the scenario view (steps and `- expect:` outcomes).
 
 ---
 
-#### 4. Verification Layer
+#### 4. CLI
 
-Verification determines task completion.
-
-Responsibilities:
-
-- Lint validation
-- Test execution
-- Failure reporting
-- Log generation
-
-Verification is the final authority.
-
-A task is never considered complete without successful verification.
+`scripts/task.ts` is the operational interface. It creates, activates and verifies tasks, shows the board, and generates AI handoff and recovery prompts.
 
 ---
 
-#### 5. Browser Exploration Layer
+#### 5. Verification Layer
 
-Playwright MCP is the recommended mechanism for browser exploration and selector validation when selector discovery, UI investigation, or application exploration is required.
-The protocol requires validation against reality, not a specific tool.
+The verification gate determines task completion. It is the final authority, for humans and agents alike. See [Quality Gates](#quality-gates).
 
 ---
 
-#### 6. Lifecycle Management Layer (Optional)
+#### 6. Playwright Agent Layer
 
-The SPP Lifecycle MCP (located in mcp/server.ts) is optional and experimental.
-It provides programmatic task activation and verification for AI-enabled IDEs.
-Most users will interact directly with task files and the CLI.
+Everything Playwright provides for agents, version-matched to the installed `@playwright/test`:
+
+| Tool | What it is | Used in |
+| --- | --- | --- |
+| `npx playwright cli` (Agent CLI) | Token-efficient browser driver: `snapshot`, `find`, `click e15`, `generate-locator`, sessions, `show` dashboard | Explore, Promote, Recover |
+| `npx playwright test --debug=cli` | Pauses a real test so the CLI can `attach` to it | Explore, Recover |
+| `npx playwright trace` | Reads trace files from the terminal | Recover |
+| Agent skills (`playwright-cli`, `playwright-trace`) | Instructions that teach assistants the CLI | All phases |
+| Test Agents: planner, generator, healer | Subagents backed by `playwright run-test-mcp-server` | Plan, Implement, Recover |
+
+Agent definitions and skills are generated by Playwright and committed for Claude Code, VS Code / Copilot, Codex and OpenCode. Regenerate them after every Playwright upgrade with `npm run agents`. Never hand-edit them; SPP rules are enforced by the gate, not by modifying agent prompts.
+
+Playwright MCP (`npx playwright mcp`) remains a supported alternative for exploration.
+
+---
+
+#### 7. Lifecycle Management Layer (Optional)
+
+The SPP Lifecycle MCP (`mcp/server.ts`) exposes task creation, activation and verification to MCP-capable assistants. It runs the same gate as the CLI.
+
+---
+
+### Seeds and Fixtures
+
+- `tests/fixtures.ts` exposes Page Objects as fixtures (`loginPage`, `inventoryPage`, `sidebar`) plus `loggedInPage` (logged in as the standard user). Specs import `test` and `expect` from here.
+- `tests/seed.spec.ts` is the default seed: the starting state (logged in) for the planner, the generator and `--debug=cli` sessions.
+- `tests/seed.guest.spec.ts` is the seed for scenarios that start logged out.
+
+Seeds also run in the normal suite as smoke tests.
 
 ---
 
@@ -155,28 +137,19 @@ Most users will interact directly with task files and the CLI.
 Choose the next eligible task.
 
 ```text
-TODO → IN_PROGRESS 
+TODO → IN_PROGRESS
 ```
 
 Requirements:
 
 - Dependencies satisfied
-- No active task already in progress
+- No other task in progress (one active task at a time)
 
 ---
 
 ### Phase 2 — Understand
 
-Before implementation begins, you MUST complete the "Understanding" section in the task file.
-
-Understand:
-
-- Feature
-- Expected behavior
-- Business outcome
-- Risk
-
-Required output:
+Before implementation begins, complete the "Understanding" section in the task file:
 
 ```markdown
 Feature:
@@ -185,114 +158,117 @@ Business Outcome:
 Risk:
 ```
 
-Implementation should never begin before this section is populated.
+Implementation never begins before this section is populated.
 
-**Note:** Explicit user approval of the Understanding phase is not required to move to Phase 3 (Explore) unless specifically requested.
+**Note:** Explicit user approval of the Understanding phase is not required to move on unless the task or the user requests it.
 
 ---
 
 ### Phase 3 — Explore
 
-Validate assumptions.
+Validate assumptions against the real application.
 
-Examples:
+Recommended: drive the app through the seed so custom setup (login, fixtures) applies.
 
-- Review page structure
-- Verify selectors
-- Inspect application behavior
-- Review existing Page Objects
+```bash
+PLAYWRIGHT_HTML_OPEN=never npx playwright test tests/seed.spec.ts --debug=cli   # in the background
+npx playwright cli attach tw-XXXX                                               # session name from the output
+npx playwright cli snapshot
+npx playwright cli find "Add to cart"
+```
 
-Recommended tool:
+Alternatives: let the planner agent explore (Phase 4), or use Playwright MCP.
 
-Playwright MCP
-
-Goal:
-
-Understand the application before modifying code.
+Goal: understand the application, and review existing Page Objects, before modifying code.
 
 ---
 
 ### Phase 4 — Plan
 
-Create a lightweight implementation plan.
-
-Example:
+Write a test plan to `specs/<TASK_ID>_<feature>.plan.md` and link it from the task:
 
 ```markdown
-Implementation Plan
-1. Create CheckoutPage
-2. Add tax selectors
-3. Add assertions
-4. Verify acceptance criteria
+- **Spec:** `specs/T-011_checkout-tax.plan.md`
 ```
 
-The plan should remain concise.
+Recommended: ask the **planner** agent, giving it the task file and the seed. For example: "Plan the scenarios in tasks/T-011_checkout-tax.md using seed tests/seed.spec.ts, save to specs/T-011_checkout-tax.plan.md."
 
-The purpose is clarity, not documentation.
+Rules:
+
+- Every Acceptance Criterion must be covered by at least one `- expect:` outcome.
+- Scenarios are independent and start from a seed.
+- Keep the task's Implementation Plan to a few lines; the detail lives in the spec.
+
+Small tasks may skip the spec file and keep a short plan in the task.
 
 ---
 
 ### Phase 5 — Implement
 
-Create or modify:
+Write the test, by hand or with the **generator** agent, which turns the spec into test files and validates selectors live.
 
-- Page Objects
-- Playwright tests
-- Supporting utilities
-
-Requirements:
-
-- **Page Objects**: Own all selectors and user actions.
-- **Tests**: Focus on behavior and business outcomes.
-- **AAA Structure**: Tests should follow Arrange → Act → Assert.
-- **Readable**: Code remains maintainable and reviewable.
+Generated tests are drafts. They locate elements on `page` directly, and the gate will reject them until Phase 6 is done.
 
 ---
 
-### Phase 6 — Verify
+### Phase 6 — Promote
 
-Execute verification.
+Bring the implementation in line with the SPP architecture:
 
-Minimum requirements:
+1. Move every selector into a Page Object (new or existing) with JSDoc metadata (`@selector`, `@strategy`, `@verified`). Use `npx playwright cli generate-locator <ref>` to get stable ARIA-first locators.
+2. Move multi-step interactions into Page Object methods.
+3. Import `test` and `expect` from `tests/fixtures.ts` and use Page Object fixtures; add new fixtures for new Page Objects.
+4. Keep the `// spec:` and `// seed:` header comments the generator adds; they trace the test back to its plan.
+5. Ensure assertions validate business outcomes from the Acceptance Criteria.
+6. Point the task's `- **Test File:**` at the final spec file.
+
+Lint enforces the result: any `page.getBy*()`, `page.locator()` or selector-string `page.click('...')` left in a `.spec.ts` file fails the gate.
+
+---
+
+### Phase 7 — Verify
 
 ```bash
-npm run lint
-npm run task <TASK_ID> 
+npm run task <TASK_ID>
 ```
 
-Verification validates:
+The gate runs, in order:
 
-- Code quality
-- Test execution
-- Acceptance criteria coverage
+1. Static checks: the declared test file (and spec, if any) exists; the test file contains no `test.fixme()` or `test.skip()`.
+2. `npm run lint`: ESLint (no raw locators in specs, no focused tests, no hard waits, typed code) and markdownlint.
+3. The task's Playwright test.
 
 Outcome:
 
 ```text
-IN_PROGRESS → DONE 
-```
-
-or
-
-```text
-IN_PROGRESS → BLOCKED 
+IN_PROGRESS → DONE
+IN_PROGRESS → BLOCKED (blockReason: verification | regression)
 ```
 
 ---
 
-### Phase 7 — Recover
+### Phase 8 — Recover
 
 When verification fails:
 
-1. Read logs.
-2. Identify the root cause.
-3. Confirm the root cause using available evidence.
-4. Apply the smallest possible fix.
-5. Re-run verification.
+1. Read `logs/last_run.log`.
+2. Find the root cause with evidence:
+   - the **healer** agent, which replays the failing test, inspects the page and patches the test; or
+   - `npx playwright test <file> --debug=cli`, then `npx playwright cli attach` to inspect the paused page; and/or
+   - `npx playwright trace open <trace.zip>` for traces captured on CI retries.
+3. Apply the smallest possible fix. Selector fixes go into Page Objects, not specs.
+4. Re-run verification.
 
-Repeat until verification succeeds.
+Agents may loop through steps 2–4 on their own. They may not mark the task `DONE`; only the gate does.
 
-Evidence always precedes fixes.
+#### Regressions need a human
+
+If the healer (or anyone) concludes the app, not the test, is wrong, it marks the test `test.fixme()` with a comment explaining why. The gate then blocks the task with `blockReason: regression`. A human decides:
+
+- **App regression:** report the bug; the task stays `BLOCKED` until the app is fixed.
+- **Intended change:** update the spec and the test, remove `test.fixme()`, re-verify.
+
+Agents must not remove `test.fixme()` without that decision.
 
 ---
 
@@ -308,15 +284,13 @@ Task has not started.
 
 ### IN_PROGRESS
 
-Task is actively being implemented.
+Task is actively being worked on. Only one task may be in progress.
 
 ---
 
 ### BLOCKED
 
-Task cannot continue or verification failed.
-
-A block reason should be recorded.
+Task cannot continue or verification failed. The gate records the block reason.
 
 #### Block Reason Definitions
 
@@ -325,29 +299,26 @@ A block reason should be recorded.
 | `dependency` | Waiting on another task to be completed. |
 | `requirement` | Missing clarification or business requirement. |
 | `selector` | UI locator issue preventing progress. |
-| `verification` | Linting or test verification failure. |
+| `verification` | Static checks, lint or test failure. |
 | `environment` | Tooling, infrastructure, browser, or setup issue. |
+| `regression` | The test is marked `test.fixme()`: the app contradicts the spec. Needs a human decision. |
 
 Example:
 
 ```yaml
 status: BLOCKED
-blockReason: verification 
+blockReason: regression
 ```
 
 ---
 
 ### DONE
 
-Verification completed successfully.
-
-All acceptance criteria satisfied.
+Verification passed and all acceptance criteria are satisfied.
 
 ---
 
 ## Task Structure
-
-Standard task format:
 
 ```markdown
 ---
@@ -357,30 +328,33 @@ status: TODO
 dependsOn: []
 ---
 
-# Understanding
+## Understanding
 
 Feature:
 Expected Behavior:
 Business Outcome:
 Risk:
 
-# Context
+## Context
 
-- **Page Object:**
-- **Test File:**
-- **URL:**
+- **Page Object:** `pages/CheckoutPage.ts`
+- **Test File:** `tests/checkout_tax.spec.ts`
+- **URL:** `/checkout-step-two.html`
+- **Spec:** `specs/T-011_checkout-tax.plan.md`
 
-# Implementation Plan
+## Implementation Plan
 
-1.
-2.
-3.
+1. Explore from the seed and save the plan to specs/
+2. Implement the test
+3. Promote selectors into Page Objects
 
-# Acceptance Criteria
+## Acceptance Criteria
 
-- [ ]
-- [ ]
+- [ ] Tax is 8% of the item total
+- [ ] Total equals item total plus tax
 ```
+
+`- **Spec:**` is optional. When present, the gate checks the file exists.
 
 ---
 
@@ -388,68 +362,53 @@ Risk:
 
 ### Pre-Commit
 
-Fast, local validation to prevent common mistakes.
+Fast, local validation:
 
-Required:
+- **lint-staged**: ESLint on changed files.
+- **Selector Health Check**: ARIA-first locators in Page Objects; warns on `@verified` dates older than 90 days.
+- **Focused Test Protection**: blocks `test.only()` and `describe.only()`.
+- **Hard Wait Protection**: blocks `page.waitForTimeout()`.
+- **Skipped Test Detection**: warns on `test.skip()`.
 
-- **lint-staged**: Runs project-specific linting on changed files.
-- **Selector Health Check**: Validates ARIA-first strategies in Page Objects.
-- **Focused Test Protection**: Blocks `test.only()` and `describe.only()`.
-- **Hard Wait Protection**: Blocks `page.waitForTimeout()`.
-- **Skipped Test Detection**: Warns on `test.skip()`.
-
-### Verification Gates
-
-Required:
+### Verification Gate
 
 ```bash
-npm run lint
-npm run task <TASK_ID> 
+npm run task <TASK_ID>
 ```
+
+Runs the static checks, `npm run lint` and the task's test. CI runs `npm run lint` and the full suite on every push and pull request.
 
 ---
 
 ### Required Rules
 
-#### No Raw Locators in Specs
+#### Page Objects Own Selectors
 
-Selectors belong in Page Objects.
+All selectors live in Page Objects with JSDoc metadata. Specs call Page Objects and fixtures; they never locate elements on `page`. Enforced by ESLint for `.spec.ts` files.
 
 ---
 
 #### No Hard Waits
 
-Disallow:
-
-```typescript
-page.waitForTimeout(...) 
-```
-
-Use proper synchronization mechanisms.
+Disallow `page.waitForTimeout(...)` and `waitUntil: 'networkidle'`. Use web-first assertions and auto-waiting locators.
 
 ---
 
 #### No Accidental Test Isolation
 
-Disallow:
-
-```typescript
-test.only(...) describe.only(...) 
-```
+Disallow `test.only(...)` and `describe.only(...)`.
 
 ---
 
-#### No Committed Skipped Tests
+#### No Skipped or Fixme Tests in a DONE Task
 
-Skipped tests generate warnings and should be documented when intentionally committed.
+`test.skip()` fails the gate. `test.fixme()` blocks the task as a `regression`.
 
 ---
 
 #### Business Assertions Required
 
-Every test must validate at least one business outcome from the task acceptance criteria.
-
-Assertions should validate outcomes rather than merely element visibility.
+Every test must validate at least one business outcome from the task's acceptance criteria.
 
 **Weak Assertion:**
 
@@ -465,29 +424,32 @@ await expect(cartCount).toHaveText("3");
 await expect(orderStatus).toContainText("Completed");
 ```
 
-Passing tests without meaningful business validation are considered low quality.
+---
+
+#### Agent Rules
+
+- Agents may run inside any phase, including loops (explore, generate, heal), and may be chained.
+- One task is active at a time; agents work within that task's scope.
+- Only the verification gate moves a task to `DONE`.
+- Agents never hand-edit generated agent definitions; regenerate with `npm run agents`.
+- Agents stop and ask the user when a decision needs product knowledge (for example, a regression).
 
 ---
 
 ## CLI Responsibilities
-
-The CLI owns execution.
-
-Supported operations:
 
 ```text
 Create Task
 Activate Task
 Verify Task
 Show Board
-Show Blocked Tasks 
+Show Blocked Tasks
+Regenerate Agents (npm run agents)
 ```
 
 ---
 
 ## Commit Conventions
-
-The repository enforces a structured commit message format to ensure history remains readable and compatible with automated tooling.
 
 ### Format
 
@@ -503,82 +465,48 @@ The repository enforces a structured commit message format to ensure history rem
 - **test**: Adding or updating tests.
 - **docs**: Documentation changes.
 - **chore**: Maintenance tasks, small cleanups.
-- **build**: Dependencies, tooling, package, or infrastructure updates.
+- **build**: Dependencies, tooling, package, or infrastructure updates (including regenerated agents).
 - **arch**: Architectural changes or protocol updates.
 - **heal**: Selector repair or automation healing.
-- **map**: Mapping application structures or architectural discovery.
+- **map**: Mapping application structures, test plans or architectural discovery.
 
 ### Examples
 
 - `feat(cli): add task generator`
 - `fix(tasks): handle blocked task parsing`
-- `build(deps): upgrade playwright`
+- `build(deps): upgrade playwright and regenerate agents`
 - `heal(selectors): repair checkout locator`
+- `map(checkout): add T-011 test plan`
 
 ---
 
-## SPP v2 Scope
+## SPP v3 Scope
 
 ### Included
 
-- **Smart Playwright Protocol**: The structured workflow (Understand -> Explore -> Plan -> Implement -> Verify -> Recover).
-- **Markdown Tasks**: File-backed units of work with metadata and status.
-- **Task CLI**: Operative tool for task management and verification.
-- **Quality Gates**: Automated enforcement of Playwright best practices.
-- **Playwright Integration**: Native support for Page Objects and spec verification.
+- **Smart Playwright Protocol**: Select → Understand → Explore → Plan → Implement → Promote → Verify → Recover.
+- **Markdown Tasks and Test Plans**: file-backed units of work linked to `specs/` plans.
+- **Task CLI and Lifecycle MCP**: task management and the verification gate.
+- **Playwright Agent Tooling**: Agent CLI, skills and Test Agents (planner, generator, healer), regenerated per Playwright release.
+- **Quality Gates**: automated enforcement of Page Objects and Playwright best practices.
 
 ### Excluded
 
-- **Multi-Agent Systems**: SPP is designed for single-actor (Human or AI) task execution.
-- **Database Storage**: All state is stored in the filesystem.
-- **Autonomous Loops**: Verification and recovery require explicit actor triggers.
-- **Complex Integrations**: No native Jira, Slack, or CI dashboarding.
+- **Database Storage**: all state lives in the filesystem.
+- **Parallel task execution**: one active task at a time.
+- **Complex Integrations**: no native Jira, Slack, or CI dashboarding.
 
 ---
 
 ## Documentation Structure
 
-The framework maintains five primary documents.
-
 ```text
-README.md
-PROTOCOL.md
-CLI.md
-ROADMAP.md
-AGENTS.md
+README.md        onboarding, quick start
+docs/PROTOCOL.md architectural source of truth: workflow, states, rules, gates
+docs/CLI.md      commands, agents and MCP setup, troubleshooting
+docs/ROADMAP.md  planned improvements
+AGENTS.md        instructions for AI assistants (CLAUDE.md imports it)
 ```
-
-Purpose:
-
-README.md
-
-- onboarding
-- quick start
-- installation
-
-PROTOCOL.md
-
-- architectural source of truth
-- workflow
-- states
-- rules
-- quality gates
-
-CLI.md
-
-- commands
-- troubleshooting
-- operational behavior
-
-ROADMAP.md
-
-- future enhancements
-- planned improvements
-
-AGENTS.md
-
-- lightweight instructions for AI assistants
-- references protocol
 
 ---
 
@@ -586,17 +514,11 @@ AGENTS.md
 
 SPP intentionally excludes:
 
-- Multi-agent orchestration
-- Autonomous execution loops
-- Memory systems
-- Vector databases
-- Knowledge graphs
-- Self-healing selectors
-- Jira integration
-- Complex workflow engines
-- Custom task databases
-
-The protocol favors simplicity over automation complexity.
+- Vector databases, knowledge graphs or memory systems
+- Custom task databases or cloud task management
+- Jira or other tracker integration
+- Custom agent frameworks (SPP uses Playwright's agents instead)
+- Agents marking their own work complete
 
 ---
 
@@ -604,33 +526,29 @@ The protocol favors simplicity over automation complexity.
 
 A task may move to DONE only when:
 
-- Acceptance criteria satisfied
+- Acceptance criteria are satisfied
+- Selectors live in Page Objects
 - Lint passes
-- Tests pass
-- Verification succeeds
-
-Verification remains the final authority.
-
-Code written without successful verification is not considered complete.
+- Tests pass, with no skipped or fixme tests
+- The verification gate succeeds
 
 ---
 
 ## Agent Completion Protocol
 
-The verification step is the final authority in SPP.
-
-AI assistants must not claim a task is complete unless verification has successfully passed.
+The verification step is the final authority in SPP. AI assistants must not claim a task is complete unless verification has passed.
 
 ### 1. Ready for Verification
 
-Use this response when implementation is finished but verification has not yet been executed.
+Use this response when implementation and promotion are finished but verification has not yet been executed.
 
 ```text
 Task <TASK_ID> Ready for Verification
 Summary:
+✅ Spec: specs/<TASK_ID>_<feature>.plan.md
 ✅ Created <PageObject> with JSDoc
 ✅ Created <TestFile> verifying <Requirement>
-✅ No raw locators used
+✅ Selectors promoted to Page Objects; no raw locators in specs
 
 Next Step:
 Run:
@@ -639,14 +557,15 @@ npm run task <TASK_ID>
 
 ### 2. Complete Response
 
-Use this response only when verification has successfully passed.
+Use this response only when verification has passed.
 
 ```text
 Task <TASK_ID> Complete ✓
 Summary:
+✅ Spec: specs/<TASK_ID>_<feature>.plan.md
 ✅ Created <PageObject> with JSDoc
 ✅ Created <TestFile> verifying <Requirement>
-✅ No raw locators used
+✅ Selectors promoted to Page Objects; no raw locators in specs
 ✅ lint passed
 ✅ tests passed
 All acceptance criteria met.
@@ -659,7 +578,7 @@ Review the generated changes and commit if satisfied.
 Use this response when implementation cannot proceed or verification fails.
 
 ```text
-Task <TASK_ID> Blocked
+Task <TASK_ID> Blocked (<blockReason>)
 Summary:
 - <What was attempted>
 - <What failed or remains incomplete>
@@ -667,8 +586,10 @@ Summary:
 
 Recovery Required:
 1. Review logs/last_run.log
-2. Identify the root cause
+2. Identify the root cause (healer agent, --debug=cli, or trace)
 3. Apply the smallest possible fix
 4. Retry:
 npm run task <TASK_ID>
 ```
+
+For `regression`, replace "Recovery Required" with the question the user must answer: is the app or the spec wrong?

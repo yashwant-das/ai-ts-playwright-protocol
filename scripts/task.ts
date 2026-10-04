@@ -6,6 +6,7 @@ import { Task } from '../types/task';
 import { exec } from 'child_process';
 import pc from 'picocolors';
 import clipboard from 'clipboardy';
+import { GateError, runStaticGates, setTaskStatus } from './gate';
 
 const theme = {
     status: (s: string) => {
@@ -31,7 +32,8 @@ function handleCancel() {
     process.exit(0);
 }
 
-const TASKS_DIR = path.join(__dirname, '../tasks');
+const ROOT_DIR = path.join(__dirname, '..');
+const TASKS_DIR = path.join(ROOT_DIR, 'tasks');
 const LOG_DIR = path.join(process.cwd(), 'logs');
 if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR);
 const LOG_FILE = path.join(LOG_DIR, 'last_run.log');
@@ -125,20 +127,6 @@ function getNextTask(tasks: (Task & { file: string, content: string })[]) {
 }
 
 /**
- * Updates the status field in a task file's front-matter.
- * @param filePath Path to the task markdown file.
- * @param fullContent The current raw content of the file.
- * @param newStatus The new status to set.
- */
-function updateTaskStatus(filePath: string, fullContent: string, newStatus: string) {
-    let newContent = fullContent.replace(/status: ["']?.*["']?/, `status: "${newStatus}"`);
-    if (newStatus === 'DONE') {
-        newContent = newContent.replace(/- \[ \]/g, '- [x]');
-    }
-    fs.writeFileSync(filePath, newContent);
-}
-
-/**
  * Attempts to copy text to the system clipboard.
  * @param text The text to copy.
  * @returns True if successful, false otherwise.
@@ -168,9 +156,22 @@ async function processTask(task: Task & { file: string, content: string }) {
     try {
         if (task.status === 'TODO') {
             log.step(`Status: ${theme.status('TODO')}. Moving task to ${theme.status('IN_PROGRESS')}.`);
-            updateTaskStatus(filePath, task.content, 'IN_PROGRESS');
+            setTaskStatus(filePath, task.content, 'IN_PROGRESS');
             
-            const prompt = `Read docs/PROTOCOL.md\n\nTask: ${actualTaskId} ${task.title}\n\nFollow the Smart Playwright Protocol:\n1. Understand\n2. Explore\n3. Plan\n4. Implement\n\nDo not begin implementation until Understanding is completed.\n\nTask file: tasks/${task.file}`;
+            const prompt = [
+                'Read docs/PROTOCOL.md',
+                '',
+                `Task: ${actualTaskId} ${task.title}`,
+                `Task file: tasks/${task.file}`,
+                '',
+                'Follow the Smart Playwright Protocol:',
+                '1. Understand: fill the Understanding section first',
+                '2. Explore: playwright-cli attached to tests/seed.spec.ts, or the playwright-test-planner agent',
+                `3. Plan: save the plan to specs/${actualTaskId}_<feature>.plan.md and link it as **Spec:**`,
+                '4. Implement: write the test (or use the playwright-test-generator agent)',
+                '5. Promote: move every selector into a Page Object, import test/expect from tests/fixtures',
+                `6. Verify: npm run task ${actualTaskId}`,
+            ].join('\n');
             const copied = copyToClipboard(prompt);
 
             note(
@@ -184,18 +185,14 @@ async function processTask(task: Task & { file: string, content: string }) {
             
             fs.writeFileSync(LOG_FILE, `--- Verification Run Started for ${actualTaskId} ---\n`);
 
+            const { testFile } = runStaticGates(task.content, ROOT_DIR);
+            mkLog(`✓ static gates passed (${testFile})`);
+
             s = clackSpinner();
             s.start('Running lint');
             await runCmd('npm run lint');
             s.stop(theme.success('Lint passed'));
 
-            const testFileMatch = task.content.match(/- \*\*Test File:\*\* `(.*)`/);
-            if (!testFileMatch) {
-                log.error(theme.error('Task does not declare a test file. Cannot verify.'));
-                throw new Error("No Test File found");
-            }
-            const testFile = testFileMatch[1];
-            
             s = clackSpinner();
             s.start(`Running Playwright test: ${testFile}`);
             await runCmd(`npm test ${testFile}`);
@@ -203,7 +200,7 @@ async function processTask(task: Task & { file: string, content: string }) {
 
             log.success(theme.success('Verification passed.'));
             note(
-                `✓ lint passed\n✓ tests passed\n✓ no focused tests\n✓ no hard waits detected`,
+                `✓ declared files exist, no fixme/skip\n✓ lint passed (no raw locators, focused tests or hard waits)\n✓ tests passed`,
                 theme.noteTitle('Verification Summary')
             );
             
@@ -217,7 +214,7 @@ async function processTask(task: Task & { file: string, content: string }) {
             }
             
             if (markDone) {
-                updateTaskStatus(filePath, task.content, 'DONE');
+                setTaskStatus(filePath, task.content, 'DONE');
                 log.info(`${pc.blue('Next:')} Run ${pc.bold('npm run task next')} to pick up the next task.`);
             } else {
                 log.info(`Task remains ${theme.status(task.status)}.`);
@@ -229,27 +226,48 @@ async function processTask(task: Task & { file: string, content: string }) {
             
             fs.writeFileSync(LOG_FILE, `--- Verification Run Started for ${actualTaskId} ---\n`);
 
+            const { testFile } = runStaticGates(task.content, ROOT_DIR);
+
             s = clackSpinner();
             s.start('Running lint');
             await runCmd('npm run lint');
             s.stop(theme.success('Lint passed'));
 
-            const testFileMatch = task.content.match(/- \*\*Test File:\*\* `(.*)`/);
-            const cmd = testFileMatch ? `npm test ${testFileMatch[1]}` : 'npm test';
+            const cmd = `npm test ${testFile}`;
             
             s = clackSpinner();
             s.start('Running tests');
             await runCmd(cmd);
             s.stop(theme.success('Verification passed. Task remains DONE.'));
         }
-    } catch {
+    } catch (err: unknown) {
         if (s) {
             s.stop(theme.error('Command failed.'));
         }
-        log.error(theme.error('Verification failed.'));
-        updateTaskStatus(filePath, task.content, 'BLOCKED');
-        
-        const repairPrompt = `Task ${actualTaskId} is BLOCKED. Verification failed.\n\nRead docs/PROTOCOL.md.\n\nReview:\nlogs/last_run.log\n\nDiagnose the root cause.\nApply the smallest possible fix.\nRe-run: npm run task ${actualTaskId}`;
+        const reason = err instanceof GateError ? err.reason : 'verification';
+        const message = err instanceof Error ? err.message : String(err);
+        mkLog(`\n[${actualTaskId}] Verification FAILED (${reason}): ${message}`);
+        log.error(theme.error(`Verification failed (${reason}): ${message}`));
+        setTaskStatus(filePath, fs.readFileSync(filePath, 'utf8'), 'BLOCKED', reason);
+
+        const repairPrompt = reason === 'regression'
+            ? [
+                `Task ${actualTaskId} is BLOCKED (regression). Human decision required.`,
+                '',
+                message,
+                '',
+                'Do not remove test.fixme() until the user confirms whether the app or the spec is wrong.',
+            ].join('\n')
+            : [
+                `Task ${actualTaskId} is BLOCKED. Verification failed.`,
+                '',
+                'Read docs/PROTOCOL.md (Recover).',
+                'Review logs/last_run.log, then find the root cause with evidence:',
+                `- the playwright-test-healer agent, or npx playwright test <test file> --debug=cli + playwright-cli attach`,
+                '- npx playwright trace open <trace.zip> for traces from CI retries',
+                'Apply the smallest possible fix; selectors stay in Page Objects.',
+                `Re-run: npm run task ${actualTaskId}`,
+            ].join('\n');
         const copied = copyToClipboard(repairPrompt);
 
         note(
@@ -338,12 +356,13 @@ Risk:
 - **Page Object:** ${task.pageObject ? `\`pages/${task.pageObject.endsWith('.ts') ? task.pageObject : task.pageObject + '.ts'}\`` : ''}
 - **Test File:** ${task.testFile ? `\`${task.testFile.endsWith('.spec.ts') ? task.testFile : task.testFile + '.spec.ts'}\`` : ''}
 - **URL:** ${task.url || ''}
+- **Spec:**
 
 ## Implementation Plan
 
-1.
-2.
-3.
+1. Explore from the seed and save the plan to specs/ (link it above as **Spec:**)
+2. Implement the test
+3. Promote selectors into Page Objects
 
 ## Acceptance Criteria
 
@@ -479,7 +498,7 @@ async function main() {
 
                     // Park the current task
                     const inProgressPath = path.join(process.cwd(), 'tasks', inProgressTask.file);
-                    updateTaskStatus(inProgressPath, inProgressTask.content, 'TODO');
+                    setTaskStatus(inProgressPath, inProgressTask.content, 'TODO');
                     log.step(`Parked ${inProgressTask.id} back to TODO.`);
                 }
             }

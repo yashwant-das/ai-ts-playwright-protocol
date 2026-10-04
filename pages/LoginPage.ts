@@ -42,4 +42,15 @@ export class LoginPage extends BasePage {
         await this.passwordInput.waitFor({ state: 'visible' });
         await this.loginButton.waitFor({ state: 'visible' });
     }
+
+    /**
+     * Submits the login form with the given credentials
+     * @param username - Account username
+     * @param password - Account password
+     */
+    async login(username: string, password: string): Promise<void> {
+        await this.usernameInput.fill(username);
+        await this.passwordInput.fill(password);
+        await this.loginButton.click();
+    }
 }
