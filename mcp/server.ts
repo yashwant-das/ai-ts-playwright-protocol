@@ -6,6 +6,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import fm from 'front-matter';
 import { Task } from '../types/task';
+import { GateError, runStaticGates, setTaskStatus } from '../scripts/gate';
 
 // ---------------------------------------------------------------------------
 // Server Setup
@@ -13,10 +14,11 @@ import { Task } from '../types/task';
 
 const server = new McpServer({
     name: 'smart-playwright-protocol',
-    version: '2.1.1',
+    version: '3.0.0',
 });
 
-const TASKS_DIR = path.resolve(__dirname, '../tasks');
+const ROOT_DIR = path.resolve(__dirname, '..');
+const TASKS_DIR = path.join(ROOT_DIR, 'tasks');
 const LOG_DIR = path.resolve(process.cwd(), 'logs');
 const LOG_FILE = path.join(LOG_DIR, 'last_run.log');
 
@@ -156,27 +158,6 @@ function getAllTasks(): TaskWithMeta[] {
 }
 
 /**
- * Updates the status field in a task file's front-matter.
- * @param filePath Path to the task file.
- * @param fullContent Full content of the task file.
- * @param newStatus The new status value.
- */
-function updateTaskStatus(
-    filePath: string,
-    fullContent: string,
-    newStatus: string,
-): void {
-    let updated = fullContent.replace(
-        /status: ["']?.*["']?/,
-        `status: "${newStatus}"`,
-    );
-    if (newStatus === 'DONE') {
-        updated = updated.replace(/- \[ \]/g, '- [x]');
-    }
-    fs.writeFileSync(filePath, updated);
-}
-
-/**
  * Finds a specific task by its ID.
  * @param taskId The task ID (e.g., T-001).
  * @returns The task object or an error message.
@@ -213,12 +194,12 @@ function textResponse(text: string) {
 // ---------------------------------------------------------------------------
 
 /**
- * Tool to generate a new SPP v2.1.1 compliant task file in the tasks/ directory.
+ * Tool to generate a new SPP v3 compliant task file in the tasks/ directory.
  */
 server.registerTool(
     'create_task',
     {
-        description: 'Generate a new SPP v2.1.1 compliant task file in the tasks/ directory. This tool ensures consistent task structure and metadata.',
+        description: 'Generate a new SPP v3 compliant task file in the tasks/ directory. This tool ensures consistent task structure and metadata.',
         inputSchema: {
             taskId: z
                 .string()
@@ -286,12 +267,13 @@ Risk:
 - **Page Object:** ${pageObject ? `\`pages/${pageObject.endsWith('.ts') ? pageObject : pageObject + '.ts'}\`` : ''}
 - **Test File:** ${testFile ? `\`${testFile.endsWith('.spec.ts') ? testFile : testFile + '.spec.ts'}\`` : ''}
 - **URL:** ${url || ''}
+- **Spec:**
 
 ## Implementation Plan
 
-1.
-2.
-3.
+1. Explore from the seed and save the plan to specs/ (link it above as **Spec:**)
+2. Implement the test
+3. Promote selectors into Page Objects
 
 ## Acceptance Criteria
 
@@ -349,7 +331,7 @@ server.registerTool(
             );
         }
 
-        updateTaskStatus(
+        setTaskStatus(
             path.join(TASKS_DIR, target.file),
             target.content,
             'IN_PROGRESS',
@@ -385,7 +367,7 @@ server.registerTool(
 server.registerTool(
     'verify_task',
     {
-        description: 'Run automated quality gates (ESLint linting and Playwright tests) for a task. If both gates pass, the task transitions to DONE. If either gate fails, the task transitions to BLOCKED and the failure details are written to logs/last_run.log.',
+        description: 'Run the SPP verification gate for a task: static checks (declared test/spec files exist, no test.fixme or test.skip in the test file), ESLint (including no raw locators in specs) and the Playwright test. If every gate passes, the task transitions to DONE. Otherwise it transitions to BLOCKED with blockReason "regression" (test.fixme found: needs a human decision) or "verification", and details are written to logs/last_run.log.',
         inputSchema: {
             taskId: z
                 .string()
@@ -413,23 +395,8 @@ server.registerTool(
         fs.writeFileSync(LOG_FILE, `--- Verification Run Started for ${taskId} ---\n`);
 
         try {
-            // ── Gate 1: Lint ──────────────────────────────────────────
-            log(`[${taskId}] Running lint...`);
-            logToFile(`[${taskId}] Running lint checks...`);
-            await runCmd('npm run lint');
-            logToFile(`[${taskId}] ✓ Lint passed`);
-
-            // ── Gate 2: Playwright Tests ──────────────────────────────
-            const testFileMatch = freshContent.match(
-                /- \*\*Test File:\*\* \`(.*)\`/,
-            );
-            if (!testFileMatch) {
-                throw new Error(
-                    `Task ${taskId} does not declare a test file in its body. ` +
-                    'Expected a line like: - **Test File:** `tests/example.spec.ts`',
-                );
-            }
-            const testFile = testFileMatch[1];
+            // ── Gate 0: Static checks (files, fixme/skip) ─────────────
+            const { testFile } = runStaticGates(freshContent, ROOT_DIR);
 
             // Security: validate the extracted path before passing to shell
             const validation = validateTestFilePath(testFile);
@@ -438,6 +405,15 @@ server.registerTool(
                     `Security: ${validation.reason}`,
                 );
             }
+            logToFile(`[${taskId}] ✓ Static gates passed`);
+
+            // ── Gate 1: Lint ──────────────────────────────────────────
+            log(`[${taskId}] Running lint...`);
+            logToFile(`[${taskId}] Running lint checks...`);
+            await runCmd('npm run lint');
+            logToFile(`[${taskId}] ✓ Lint passed`);
+
+            // ── Gate 2: Playwright Tests ──────────────────────────────
 
             log(`[${taskId}] Running tests: ${testFile}`);
             logToFile(`[${taskId}] Running Playwright tests: ${testFile}`);
@@ -445,7 +421,7 @@ server.registerTool(
             logToFile(`[${taskId}] ✓ Tests passed`);
 
             // ── Both gates passed: mark DONE ──────────────────────────
-            updateTaskStatus(filePath, freshContent, 'DONE');
+            setTaskStatus(filePath, freshContent, 'DONE');
             log(`[${taskId}] Verification passed → DONE`);
             logToFile(`[${taskId}] Verification PASSED. Status → DONE`);
 
@@ -454,10 +430,9 @@ server.registerTool(
                     `Task ${taskId} passed all quality gates and is now DONE.`,
                     '',
                     'Verification Summary:',
-                    '  ✓ lint passed',
+                    '  ✓ declared files exist, no fixme/skip',
+                    '  ✓ lint passed (no raw locators, focused tests or hard waits)',
                     `  ✓ tests passed (${testFile})`,
-                    '  ✓ no focused tests',
-                    '  ✓ no hard waits detected',
                     notes ? `\nNotes: ${notes}` : '',
                 ]
                     .filter(Boolean)
@@ -467,11 +442,12 @@ server.registerTool(
             const message =
                 err instanceof Error ? err.message : String(err);
 
-            // Gate failure: mark BLOCKED
-            updateTaskStatus(filePath, freshContent, 'BLOCKED');
-            log(`[${taskId}] Verification failed → BLOCKED`);
+            // Gate failure: mark BLOCKED with the reason
+            const reason = err instanceof GateError ? err.reason : 'verification';
+            setTaskStatus(filePath, freshContent, 'BLOCKED', reason);
+            log(`[${taskId}] Verification failed → BLOCKED (${reason})`);
             logToFile(
-                `[${taskId}] Verification FAILED. Status → BLOCKED\nError: ${message}`,
+                `[${taskId}] Verification FAILED. Status → BLOCKED (${reason})\nError: ${message}`,
             );
 
             // Read last 30 lines of the log for immediate AI feedback
@@ -488,13 +464,15 @@ server.registerTool(
                 [
                     `Error: ${message}`,
                     '',
-                    `Task ${taskId} is now BLOCKED. Verification failed.`,
+                    `Task ${taskId} is now BLOCKED (${reason}). Verification failed.`,
                     '',
                     '--- Verification Log Excerpt (Last 30 lines) ---',
                     logExcerpt,
                     '--- End of Excerpt ---',
                     '',
-                    'Please diagnose the failure based on the excerpt above or by reading logs/last_run.log for full output. Once fixed, call verify_task again.'
+                    reason === 'regression'
+                        ? 'Human decision required: ask the user whether the app or the spec is wrong before removing test.fixme().'
+                        : 'Diagnose the root cause from the excerpt or logs/last_run.log (the playwright-test-healer agent or `npx playwright test <file> --debug=cli` can help). Keep selectors in Page Objects. Once fixed, call verify_task again.'
                 ].join('\n')
             );
         }

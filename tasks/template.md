@@ -19,12 +19,13 @@ Risk:
 - **Page Object:**
 - **Test File:**
 - **URL:**
+- **Spec:**
 
 ## Implementation Plan
 
-1.
-2.
-3.
+1. Explore from the seed and save the plan to specs/ (link it above as **Spec:**)
+2. Implement the test
+3. Promote selectors into Page Objects
 
 ## Acceptance Criteria
 

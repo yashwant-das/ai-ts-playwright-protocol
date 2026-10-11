@@ -42,6 +42,15 @@ export default [
       'playwright/no-wait-for-timeout': 'error', // Ban hard waits
       'playwright/no-focused-test': 'error',    // Ban test.only and describe.only
       'playwright/no-skipped-test': 'warn',     // Detect test.skip (Warning)
+      // Selectors belong in Page Objects. Catches agent-generated drafts that still
+      // locate elements on `page` directly; see the Promote step in docs/PROTOCOL.md.
+      'no-restricted-syntax': ['error', {
+        selector: "CallExpression[callee.type='MemberExpression'][callee.object.name='page'][callee.property.name=/^(locator|frameLocator|getBy|\\$)/]",
+        message: 'No raw locators in specs: move this selector into a Page Object (SPP Promote step).',
+      }, {
+        selector: "CallExpression[callee.type='MemberExpression'][callee.object.name='page'][callee.property.name=/^(click|dblclick|fill|type|press|check|uncheck|hover|tap|focus|selectOption|setInputFiles|dragAndDrop|textContent|innerText|innerHTML|inputValue|getAttribute|isVisible|isHidden|isChecked|isEnabled|isDisabled|isEditable|waitForSelector)$/]",
+        message: 'No selector-string page actions in specs: call a Page Object method instead (SPP Promote step).',
+      }],
     },
   },
   {

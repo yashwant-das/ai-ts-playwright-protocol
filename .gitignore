@@ -38,11 +38,12 @@ lint_output.txt
 # --- IDE & Editor ---
 .cursor/
 .idea/
-.vscode/
+.vscode/*
 !.vscode/extensions.json
 !.vscode/launch.json
 !.vscode/settings.json
 !.vscode/tasks.json
+!.vscode/mcp.json
 *.swp
 *.swo
 
@@ -55,3 +56,4 @@ lint_output.txt
 ehthumbs.db
 Thumbs.db
 /.playwright-mcp
+/.playwright-cli

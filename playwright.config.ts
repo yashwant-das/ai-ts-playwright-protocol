@@ -3,7 +3,7 @@ import * as dotenv from 'dotenv';
 import path from 'path';
 
 // Load environment variables from .env file
-dotenv.config({ path: path.resolve(__dirname, '.env') });
+dotenv.config({ path: path.resolve(__dirname, '.env'), quiet: true });
 
 if (!process.env.BASE_URL) {
   console.warn('\x1b[33m%s\x1b[0m', 'Warning: BASE_URL is not set. Falling back to default Sauce Demo URL.');

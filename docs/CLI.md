@@ -15,6 +15,9 @@
 | `npm run task status` | Show project task summary and board. |
 | `npm run task blocked` | List all tasks currently in BLOCKED state. |
 | `npm run task <TASK_ID>` | Activate, verify, or re-verify one specific task. |
+| `npm run task help` | Print the command list. |
+| `npm run agents` | Regenerate Playwright Test Agents and skills for every supported assistant (run after each Playwright upgrade). |
+| `npm run agents -- <loop...>` | Regenerate for specific assistants only: `claude`, `vscode`, `codex`, `opencode`. |
 
 ## Interactive Menu
 
@@ -31,8 +34,24 @@ Available menu actions:
 | `Create a new task` | Launches the interactive wizard to generate a new task file. |
 | `Activate or resume next task` | Selects the current active task first, then the next dependency-ready `TODO` task. Copies the AI handoff prompt to the clipboard. |
 | `Verify current active task` | Runs verification for the current active task. Copies a repair prompt if verification fails. |
-| `Show task board` | Prints task summary, active task, and recent tasks. |
+| `Show task board` | Prints status counts and one row per task (ID, status, title, block reason). |
 | `Show blocked tasks` | Lists tasks currently marked `BLOCKED` with reasons. |
+
+## Interactive and Non-Interactive Output
+
+The CLI adapts to where it runs:
+
+| | In a terminal | Piped output, CI, AI assistants |
+| :--- | :--- | :--- |
+| Progress | Spinner per gate step, replaced in place by its result | One result line per step (no spinner frames) |
+| `npm run task` | Interactive menu | Prints the command list |
+| Verification passed | Asks to mark the task `DONE` | Marks it `DONE` (the gate is the authority) |
+| Parking an active task | Asks for confirmation | Refuses; finish or park the task in a terminal |
+| `npm run task create` | Wizard | Refuses; copy `tasks/template.md` or use the MCP `create_task` tool |
+
+Every gate step reports its duration, the test step reports Playwright's counts (for example `2 passed`), and a failure prints the lint errors (`file:line  message  rule`) or the failing tests with their first error, followed by the path to the full log.
+
+Exit codes: `0` on success, `1` when verification fails, the task is not found, or a command refuses to run. Use `npm run -s task ...` to hide npm's own banner.
 
 ## Task Creation Wizard
 
@@ -45,19 +64,22 @@ Run `npm run task create` to start the interactive task generator. It prompts fo
 - **URL**: (Optional) The starting URL.
 - **Acceptance Criteria**: (Optional) Comma-separated list of requirements.
 
-The wizard generates an SPP v2 compliant Markdown file in `tasks/`.
+The wizard generates an SPP v3 Markdown file in `tasks/`, including an empty `- **Spec:**` line to link the test plan once it exists.
 
 ## AI Handoff Prompts
 
-When a task is activated or blocked, the runner generates a concise prompt for the AI assistant and **automatically copies it to your clipboard**.
+When a task is activated or blocked, the runner generates a concise prompt for the AI assistant and **automatically copies it to your clipboard**. The prompt is also printed without borders, so it can be copied straight from the terminal when no clipboard is available.
 
 ### Activation Prompt
 
-Generated when a task moves to `IN_PROGRESS`. Includes protocol instructions and the task file path.
+Generated when a task moves to `IN_PROGRESS`. Includes the task file path and the SPP phases, with the Playwright tool to use for each (CLI or planner for Explore/Plan, generator for Implement, then Promote and Verify).
 
 ### Repair Prompt
 
-Generated when verification fails and the task moves to `BLOCKED`. Points the agent to `logs/last_run.log` and instructs them to fix the smallest possible issue.
+Generated when verification fails and the task moves to `BLOCKED`.
+
+- `verification`: points the agent to `logs/last_run.log` and the recovery tools (healer agent, `--debug=cli`, trace CLI) and asks for the smallest possible fix.
+- `regression`: the test contains `test.fixme()`. The prompt asks the agent to stop and get a human decision before changing anything.
 
 > [!TIP]
 > After activating a task or seeing a failure, simply switch to your AI assistant's chat and paste (Ctrl+V/Cmd+V) to provide all necessary context.
@@ -86,7 +108,13 @@ Example:
 npm run task T-011
 ```
 
-This runs `npm run lint` and `npm test <declared-test-file>`.
+The gate runs, in order:
+
+1. **Static checks**: the declared `Test File` exists; the declared `Spec` (if any) exists; the test file has no `test.fixme()` (→ `BLOCKED`, `regression`) or `test.skip()` (→ `BLOCKED`, `verification`).
+2. `npm run lint`: ESLint, including the rule that rejects `page.getBy*()`, `page.locator()` and selector-string page actions in `.spec.ts` files, plus markdownlint.
+3. `npm test <declared-test-file>`.
+
+The block reason is written to the task's front-matter.
 
 ### Protocol Enforcement
 
@@ -102,24 +130,98 @@ logs/last_run.log
 
 The log includes stdout, stderr, lint failures, and Playwright failures. **Always read this file when a task becomes `BLOCKED`.**
 
-## Configure MCP Servers
+## Playwright Agent Tooling
 
-The framework supports MCP servers to improve the AI assistant experience.
+Everything below ships with `@playwright/test` (1.63.0), so it always matches the installed version. No global installs are required.
 
-### Official Playwright MCP (Recommended)
+### Agent CLI (recommended for exploration)
 
-Used for browser exploration and selector validation.
+```bash
+npx playwright cli open https://www.saucedemo.com   # standalone session
+npx playwright cli snapshot                          # element refs (e1, e2, ...)
+npx playwright cli generate-locator e5               # ARIA-first locator for a Page Object
+npx playwright cli show                              # dashboard of running sessions
+```
+
+To start from the app state a test sets up (login, fixtures), attach to a paused test instead:
+
+```bash
+PLAYWRIGHT_HTML_OPEN=never npx playwright test tests/seed.spec.ts --debug=cli   # background
+npx playwright cli attach tw-XXXX
+```
+
+`.playwright/cli.config.json` makes the CLI use Playwright's bundled Chromium (the CLI otherwise defaults to Google Chrome, which `npx playwright install` does not install) and sets `testIdAttribute` to `data-test` so CLI-generated locators match `playwright.config.ts`. CLI snapshots are written to `.playwright-cli/` (git-ignored).
+
+### Agent Skills
+
+Committed in `.claude/skills/` (Claude Code) and `.agents/skills/` (Codex, OpenCode, Copilot and other assistants that read the shared location):
+
+- `playwright-cli`: browser automation, test debugging, and the plan / generate / heal workflow driven by the CLI.
+- `playwright-trace`: inspect trace files with `npx playwright trace`.
+
+Assistants without skill support can learn the CLI from `npx playwright cli --help`.
+
+### Test Agents (planner, generator, healer)
+
+Generated by `npx playwright init-agents` and committed for each supported assistant:
+
+| Assistant | Agent definitions | MCP configuration |
+| --- | --- | --- |
+| Claude Code | `.claude/agents/` | `.mcp.json` |
+| VS Code / GitHub Copilot | `.github/agents/` | `.vscode/mcp.json`; Copilot coding agent setup in `.github/workflows/copilot-setup-steps.yml` |
+| Codex | `.codex/agents/` | Add the server to your Codex config (below) |
+| OpenCode | `.opencode/prompts/` | `opencode.json` |
+
+All of them use the Playwright Test MCP server: `npx playwright run-test-mcp-server`.
+
+- **VS Code** needs v1.105 or later for the agentic experience.
+- **GitHub Copilot coding agent:** add the MCP server under the repository's **Settings → Copilot → Coding agent → MCP configuration**:
+
+  ```json
+  {
+    "mcpServers": {
+      "playwright-test": {
+        "type": "stdio",
+        "command": "npx",
+        "args": ["playwright", "run-test-mcp-server"],
+        "tools": ["*"]
+      }
+    }
+  }
+  ```
+
+- **Codex:** add to your Codex `config.toml`:
+
+  ```toml
+  [mcp_servers.playwright-test]
+  command = "npx"
+  args = ["playwright", "run-test-mcp-server"]
+  ```
+
+#### Regenerating after a Playwright upgrade
+
+```bash
+npm install -D @playwright/test@<version>
+npm run agents
+npm run lint
+```
+
+`npm run agents` overwrites the generated definitions, `.mcp.json` and `opencode.json`. It keeps `tests/seed.spec.ts`, `specs/README.md` and the SPP-customized `.github/workflows/copilot-setup-steps.yml`, and removes the component-testing skill (not used by this suite). Do not hand-edit generated files; SPP rules are enforced by the verification gate.
+
+### Playwright MCP (optional)
+
+Still supported for browser exploration in assistants that prefer MCP. Use the version bundled with Playwright:
 
 ```json
 "playwright": {
   "command": "npx",
-  "args": ["-y", "@playwright/mcp@latest"]
+  "args": ["playwright", "mcp"]
 }
 ```
 
-### SPP Lifecycle MCP (Optional / Experimental)
+### SPP Lifecycle MCP (optional)
 
-Provides tools for programmatic task lifecycle management.
+Exposes task creation, activation and verification (the same gate as the CLI) as MCP tools.
 
 ```json
 "spp-protocol": {
@@ -131,54 +233,7 @@ Provides tools for programmatic task lifecycle management.
 }
 ```
 
-### Automated Setup Prompt
-
-If you want the AI assistant to configure the MCP servers for you automatically, copy and paste the following prompt into your AI assistant's chat window:
-
-```text
-Please register the following MCP servers in my IDE's MCP configuration file:
-
-1. **Official Playwright MCP** (for browser exploration and selector verification):
-   "command": "npx",
-   "args": ["-y", "@playwright/mcp@latest"]
-
-2. **SPP Lifecycle MCP** (for task lifecycle management):
-   - Determine the absolute path to `mcp/server.ts` in the current workspace.
-   "command": "npx",
-   "args": ["tsx", "<ABSOLUTE_PATH_TO_mcp/server.ts>"],
-   "env": { "NODE_OPTIONS": "--disable-warning=DEP0205" }
-
-Configuration file locations:
-- Antigravity IDE: `~/.gemini/config/mcp_config.json`
-- Gemini CLI: `~/.gemini/settings.json`
-- Cursor: `.cursor/mcp.json` in the project root
-- VS Code: `.vscode/mcp.json` in the workspace root
-Read the existing configuration if it exists; otherwise, initialize a new one. Add or update the MCP server entries without removing any existing servers, write the updated configuration, and confirm once completed.
-```
-
-### Manual Configuration
-
-Add both servers to your IDE's MCP configuration file:
-
-```json
-{
-  "mcpServers": {
-    "playwright": {
-      "command": "npx",
-      "args": ["-y", "@playwright/mcp@latest"]
-    },
-    "spp-protocol": {
-      "command": "npx",
-      "args": ["tsx", "/absolute/path/to/repo/mcp/server.ts"],
-      "env": {
-        "NODE_OPTIONS": "--disable-warning=DEP0205"
-      }
-    }
-  }
-}
-```
-
-Replace `/absolute/path/to/repo/` with the actual path to your cloned repository.
+Replace `/absolute/path/to/repo/` with the actual path to your cloned repository. Add it next to the generated `playwright-test` server in your assistant's user-level MCP configuration; project files such as `.mcp.json` are overwritten by `npm run agents`.
 
 ## Troubleshooting
 
@@ -186,10 +241,22 @@ Replace `/absolute/path/to/repo/` with the actual path to your cloned repository
 
 Check that the task file is in `tasks/` and its filename starts with the task ID (e.g., `T-011_...md`).
 
-### `No Test File found`
+### `Task does not declare a test file`
 
 Ensure the task body includes exactly one line like this:
-`- **Test File:** tests/example.spec.ts`
+`- **Test File:** \`tests/example.spec.ts\``
+
+### `No raw locators in specs`
+
+Lint found a selector in a `.spec.ts` file, usually in a generator draft. Move it into a Page Object and call the Page Object from the spec (the Promote phase in [PROTOCOL.md](PROTOCOL.md)).
+
+### Task blocked with `regression`
+
+The test contains `test.fixme()`. Decide whether the app or the spec is wrong, then either report the bug or update the spec and test and remove `test.fixme()`.
+
+### Agents are missing or out of date
+
+Run `npm run agents`. Definitions must match the installed Playwright version.
 
 ### MCP Server Does Not Start
 
@@ -208,4 +275,6 @@ echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":
 | [ROADMAP.md](ROADMAP.md) | Future enhancements and planned improvements. |
 | [../AGENTS.md](../AGENTS.md) | Lightweight instructions for AI assistants. |
 | [../scripts/task.ts](../scripts/task.ts) | Task runner implementation. |
+| [../scripts/gate.ts](../scripts/gate.ts) | Shared verification-gate checks. |
+| [../scripts/agents.ts](../scripts/agents.ts) | Regenerates Playwright agents and skills. |
 | [../mcp/server.ts](../mcp/server.ts) | Custom protocol lifecycle MCP server. |

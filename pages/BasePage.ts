@@ -12,7 +12,7 @@ export class BasePage {
    * @param url - Destination URL
    */
   async goto(url: string) {
-    await this.page.goto(url, { waitUntil: 'networkidle' });
+    await this.page.goto(url);
   }
 
   /**

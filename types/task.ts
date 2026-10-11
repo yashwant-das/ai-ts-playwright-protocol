@@ -1,4 +1,4 @@
-export type BlockReason = 'dependency' | 'requirement' | 'selector' | 'verification' | 'environment';
+export type BlockReason = 'dependency' | 'requirement' | 'selector' | 'verification' | 'environment' | 'regression';
 
 export interface Task {
   id: string;                    // e.g. "T-003"
