@@ -15,6 +15,7 @@
 | `npm run task status` | Show project task summary and board. |
 | `npm run task blocked` | List all tasks currently in BLOCKED state. |
 | `npm run task <TASK_ID>` | Activate, verify, or re-verify one specific task. |
+| `npm run task help` | Print the command list. |
 | `npm run agents` | Regenerate Playwright Test Agents and skills for every supported assistant (run after each Playwright upgrade). |
 | `npm run agents -- <loop...>` | Regenerate for specific assistants only: `claude`, `vscode`, `codex`, `opencode`. |
 
@@ -33,8 +34,24 @@ Available menu actions:
 | `Create a new task` | Launches the interactive wizard to generate a new task file. |
 | `Activate or resume next task` | Selects the current active task first, then the next dependency-ready `TODO` task. Copies the AI handoff prompt to the clipboard. |
 | `Verify current active task` | Runs verification for the current active task. Copies a repair prompt if verification fails. |
-| `Show task board` | Prints task summary, active task, and recent tasks. |
+| `Show task board` | Prints status counts and one row per task (ID, status, title, block reason). |
 | `Show blocked tasks` | Lists tasks currently marked `BLOCKED` with reasons. |
+
+## Interactive and Non-Interactive Output
+
+The CLI adapts to where it runs:
+
+| | In a terminal | Piped output, CI, AI assistants |
+| :--- | :--- | :--- |
+| Progress | Spinner per gate step, replaced in place by its result | One result line per step (no spinner frames) |
+| `npm run task` | Interactive menu | Prints the command list |
+| Verification passed | Asks to mark the task `DONE` | Marks it `DONE` (the gate is the authority) |
+| Parking an active task | Asks for confirmation | Refuses; finish or park the task in a terminal |
+| `npm run task create` | Wizard | Refuses; copy `tasks/template.md` or use the MCP `create_task` tool |
+
+Every gate step reports its duration, the test step reports Playwright's counts (for example `2 passed`), and a failure prints the lint errors (`file:line  message  rule`) or the failing tests with their first error, followed by the path to the full log.
+
+Exit codes: `0` on success, `1` when verification fails, the task is not found, or a command refuses to run. Use `npm run -s task ...` to hide npm's own banner.
 
 ## Task Creation Wizard
 
@@ -51,7 +68,7 @@ The wizard generates an SPP v3 Markdown file in `tasks/`, including an empty `- 
 
 ## AI Handoff Prompts
 
-When a task is activated or blocked, the runner generates a concise prompt for the AI assistant and **automatically copies it to your clipboard**.
+When a task is activated or blocked, the runner generates a concise prompt for the AI assistant and **automatically copies it to your clipboard**. The prompt is also printed without borders, so it can be copied straight from the terminal when no clipboard is available.
 
 ### Activation Prompt
 
@@ -133,7 +150,7 @@ PLAYWRIGHT_HTML_OPEN=never npx playwright test tests/seed.spec.ts --debug=cli   
 npx playwright cli attach tw-XXXX
 ```
 
-`.playwright/cli.config.json` sets `testIdAttribute` to `data-test` so CLI-generated locators match `playwright.config.ts`. CLI snapshots are written to `.playwright-cli/` (git-ignored).
+`.playwright/cli.config.json` makes the CLI use Playwright's bundled Chromium (the CLI otherwise defaults to Google Chrome, which `npx playwright install` does not install) and sets `testIdAttribute` to `data-test` so CLI-generated locators match `playwright.config.ts`. CLI snapshots are written to `.playwright-cli/` (git-ignored).
 
 ### Agent Skills
 

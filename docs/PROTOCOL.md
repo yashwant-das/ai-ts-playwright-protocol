@@ -201,6 +201,8 @@ Rules:
 
 Small tasks may skip the spec file and keep a short plan in the task.
 
+Plans are generated files and are excluded from markdownlint (`specs/*.plan.md`).
+
 ---
 
 ### Phase 5 — Implement
@@ -220,7 +222,7 @@ Bring the implementation in line with the SPP architecture:
 3. Import `test` and `expect` from `tests/fixtures.ts` and use Page Object fixtures; add new fixtures for new Page Objects.
 4. Keep the `// spec:` and `// seed:` header comments the generator adds; they trace the test back to its plan.
 5. Ensure assertions validate business outcomes from the Acceptance Criteria.
-6. Point the task's `- **Test File:**` at the final spec file.
+6. The gate verifies one test file per task. The generator writes one file per scenario, so merge the generated scenarios into the task's `- **Test File:**` (one `describe`, one `test` per scenario) and delete the drafts.
 
 Lint enforces the result: any `page.getBy*()`, `page.locator()` or selector-string `page.click('...')` left in a `.spec.ts` file fails the gate.
 

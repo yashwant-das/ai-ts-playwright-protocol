@@ -1,3 +1,9 @@
 {
+  "browser": {
+    "browserName": "chromium",
+    "launchOptions": {
+      "channel": "chromium"
+    }
+  },
   "testIdAttribute": "data-test"
 }
