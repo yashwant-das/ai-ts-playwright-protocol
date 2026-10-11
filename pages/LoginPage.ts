@@ -24,6 +24,20 @@ export class LoginPage extends BasePage {
     public readonly loginButton: Locator;
 
     /**
+     * @selector data-test="error"
+     * @strategy getByTestId
+     * @verified 2026-10-11
+     */
+    public readonly errorAlert: Locator;
+
+    /**
+     * @selector name="Dismiss error"
+     * @strategy getByRole
+     * @verified 2026-10-11
+     */
+    public readonly dismissErrorButton: Locator;
+
+    /**
      * Initializes the login page object
      * @param page - Playwright Page object
      */
@@ -32,6 +46,8 @@ export class LoginPage extends BasePage {
         this.usernameInput = page.getByPlaceholder('Username');
         this.passwordInput = page.getByPlaceholder('Password');
         this.loginButton = page.getByRole('button', { name: 'Login' });
+        this.errorAlert = page.getByTestId('error');
+        this.dismissErrorButton = page.getByRole('button', { name: 'Dismiss error' });
     }
 
     /**

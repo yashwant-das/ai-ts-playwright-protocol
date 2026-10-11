@@ -1,7 +1,7 @@
 ---
 id: "T-009"
 title: "Verify Locked Out User"
-status: "TODO"
+status: "DONE"
 dependsOn: []
 ---
 
@@ -19,6 +19,7 @@ Risk: Allowing locked-out users compromises security.
 - **Page Object:** `pages/LoginPage.ts`
 - **Test File:** `tests/login_error.spec.ts`
 - **URL:** `/`
+- **Spec:** `specs/T-009_login-error.plan.md`
 
 ## Implementation Plan
 
@@ -28,5 +29,5 @@ Risk: Allowing locked-out users compromises security.
 
 ## Acceptance Criteria
 
-- [ ] Attempt login with locked_out_user.
-- [ ] Verify error: "Epic sadface: Sorry, this user has been locked out."
+- [x] Attempt login with locked_out_user.
+- [x] Verify error: "Epic sadface: Sorry, this user has been locked out."
