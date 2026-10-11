@@ -44,7 +44,7 @@ Select → Understand → Explore → Plan → Implement → Promote → Verify
 
 ## Quickstart
 
-Prerequisites: Node.js 20 or later (see `.nvmrc`), and an AI assistant: Claude Code, VS Code / GitHub Copilot, Codex and OpenCode get ready-made Playwright Test Agents.
+Prerequisites: Node.js 24 (see `.nvmrc`; any version from 20 up works), and an AI assistant: Claude Code, VS Code / GitHub Copilot, Codex and OpenCode get ready-made Playwright Test Agents.
 
 ```bash
 git clone https://github.com/yashwant-das/ai-ts-playwright-protocol.git && cd ai-ts-playwright-protocol
