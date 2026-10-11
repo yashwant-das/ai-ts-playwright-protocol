@@ -83,7 +83,7 @@ The tests run against the public Sauce Demo site, so each failing test is retrie
 | Task CLI | ts-node, @clack/prompts | 10.9, 1.5 | Interactive task creation and state changes |
 | Assistant tooling | Model Context Protocol SDK | 1.29 | Exposes the task lifecycle to the assistant |
 | Schema validation | zod | 4.4 | Validates MCP tool inputs |
-| Quality gates | ESLint, markdownlint, Husky, lint-staged | 9, 0.49, 9, 17 | Same checks locally and in CI |
+| Quality gates | ESLint, markdownlint, Husky, lint-staged | 9, 0.49, 9, 17 | Lint runs on commit and in CI; tests run locally |
 
 ## Project structure
 
