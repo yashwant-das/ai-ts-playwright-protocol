@@ -5,8 +5,8 @@ import { test, expect } from './fixtures';
  * Starting state: the login page, no session.
  */
 test.describe('Seed (guest)', () => {
-    test('seed', async ({ loginPage }) => {
-        await loginPage.goto('/');
-        await expect(loginPage.loginButton).toBeVisible();
-    });
+  test('seed', async ({ loginPage }) => {
+    await loginPage.goto('/');
+    await expect(loginPage.loginButton).toBeVisible();
+  });
 });

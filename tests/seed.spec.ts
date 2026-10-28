@@ -5,7 +5,7 @@ import { test, expect } from './fixtures';
  * Starting state: logged in as standard_user on the inventory page.
  */
 test.describe('Seed', () => {
-    test('seed', async ({ loggedInPage }) => {
-        await expect(loggedInPage.inventoryItems.first()).toBeVisible();
-    });
+  test('seed', async ({ loggedInPage }) => {
+    await expect(loggedInPage.inventoryItems.first()).toBeVisible();
+  });
 });

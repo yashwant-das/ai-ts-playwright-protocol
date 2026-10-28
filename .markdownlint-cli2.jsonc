@@ -1,0 +1,15 @@
+{
+  "config": { "default": true, "MD013": false },
+  "globs": ["**/*.md"],
+  "ignores": [
+    "node_modules/**",
+    "playwright-report/**",
+    "test-results/**",
+    "dist/**",
+    ".claude/**",
+    ".agents/**",
+    ".github/agents/**",
+    ".opencode/prompts/**",
+    "specs/*.plan.md",
+  ],
+}

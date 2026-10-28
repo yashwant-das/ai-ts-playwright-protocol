@@ -5,7 +5,7 @@ export class BasePage {
    * Wrapper for Playwright Page
    * @param page - Playwright Page object
    */
-  constructor(protected page: Page) { }
+  constructor(protected page: Page) {}
 
   /**
    * Navigates to the specified URL
@@ -30,7 +30,7 @@ export class BasePage {
 
     await this.page.screenshot({
       path: `${screenshotDir}/${name}_${Date.now()}.png`,
-      fullPage: true
+      fullPage: true,
     });
   }
 }

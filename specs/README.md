@@ -7,4 +7,4 @@ Test plans written by the Playwright **planner** agent (or by hand) during the S
 - Each `- expect:` bullet should map to an Acceptance Criterion in the task.
 - Start scenarios from `tests/seed.spec.ts` (logged in) or `tests/seed.guest.spec.ts` (logged out).
 
-See [docs/PROTOCOL.md](../docs/PROTOCOL.md) for how plans move through Implement, Promote and Verify.
+See [docs/protocol.md](../docs/protocol.md) for how plans move through Implement, Promote and Verify.

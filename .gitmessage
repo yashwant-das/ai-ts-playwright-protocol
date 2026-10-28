@@ -1,10 +1,10 @@
 # <type>(<scope>): <subject>  OR  <type>: <subject>
-# 
+#
 # <body>
-# 
+#
 # <footer>
-# 
+#
 # Types: feat, fix, refactor, test, docs, chore, build, arch, heal, map
 # Scopes: (Optional) cli, protocol, tasks, deps, selectors, login, products, cart, checkout
-# 
+#
 # See AGENTS.md for full guide

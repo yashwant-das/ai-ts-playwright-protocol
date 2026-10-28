@@ -1,0 +1,12 @@
+node_modules/
+dist/
+playwright-report/
+test-results/
+coverage/
+.claude/
+.agents/
+.codex/agents/
+.github/agents/
+.opencode/prompts/
+**/*.md
+package-lock.json
