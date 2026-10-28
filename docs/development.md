@@ -98,7 +98,7 @@ Available menu actions:
 | Action | Behavior |
 | :--- | :--- |
 | `Create a new task` | Launches the interactive wizard to generate a new task file. |
-| `Activate or resume next task` | Selects the current active task first, then the next dependency-ready `TODO` task. Copies the AI handoff prompt to the clipboard. |
+| `Activate or resume next task` | Resumes the first `IN_PROGRESS` task, then retries the first `BLOCKED` task, then selects a dependency-ready `TODO` task. Tasks are considered in filename order. |
 | `Verify current active task` | Runs verification for the current active task. Copies a repair prompt if verification fails. |
 | `Show task board` | Prints status counts and one row per task (ID, status, title, block reason). |
 | `Show blocked tasks` | Lists tasks currently marked `BLOCKED` with reasons. |
@@ -134,7 +134,7 @@ The wizard generates an SPP v3 Markdown file in `tasks/`, including an empty `- 
 
 ## AI Handoff Prompts
 
-When a task is activated or blocked, the runner generates a concise prompt for the AI assistant and **automatically copies it to your clipboard**. The prompt is also printed without borders, so it can be copied straight from the terminal when no clipboard is available.
+When a task is activated or verification fails, the runner generates a prompt for the AI assistant. It copies the prompt when the system clipboard is available and always prints it for manual copying.
 
 ### Activation Prompt
 
@@ -155,12 +155,12 @@ Generated when verification fails and the task moves to `BLOCKED`.
 `npm run task status` provides a summary of the current project state:
 
 - **Summary Counts:** Total tasks by state (`TODO`, `IN_PROGRESS`, `BLOCKED`, `DONE`).
-- **Current Task:** The task currently being worked on.
-- **Recent Tasks:** A list of the most recently modified tasks.
+- **Task Rows:** All parsed tasks in filename order, including block reasons and an active-task marker.
+- **Next Action:** A suggested command based on active work, blocked work and dependency-ready TODO tasks.
 
 ## Verification & Logs
 
-The runner executes quality gates for `IN_PROGRESS` and `BLOCKED` tasks.
+The runner verifies `IN_PROGRESS` and `BLOCKED` tasks and can re-verify `DONE` tasks. A `TODO` task is activated first.
 
 ### Command
 
@@ -204,7 +204,7 @@ The log includes stdout, stderr, lint failures, and Playwright failures. **Alway
 
 ## Playwright Agent Tooling
 
-Everything below ships with the locked `@playwright/test` package, so it always matches the installed version. No global installs are required.
+The Playwright CLI, trace tools and agent/skill sources come from the locked `@playwright/test` package. Regenerate the committed definitions and skills after an upgrade to keep them aligned with that package. The SPP lifecycle MCP server is implemented in this repository. No global Playwright install is required.
 
 ### Agent CLI (recommended for exploration)
 
@@ -297,7 +297,7 @@ Still supported for browser exploration in assistants that prefer MCP. Use the v
 
 ### SPP Lifecycle MCP (optional)
 
-Exposes task creation, activation and verification (the same gate as the CLI) as MCP tools.
+Exposes `create_task`, `activate_task`, `verify_task`, `list_tasks` and `get_unmet_dependencies` as MCP tools. Verification uses the shared gate checks also used by the CLI.
 
 ```json
 "spp-protocol": {
