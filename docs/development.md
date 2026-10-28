@@ -1,9 +1,75 @@
-# Smart Playwright Protocol CLI
+# Development guide
 
 `scripts/task.ts` is the local CLI that moves Markdown task files through the framework lifecycle. Use this document when you need exact command behavior, board usage, and configuration.
 
 > [!NOTE]
-> For first-time setup and onboarding, start with [README.md](../README.md). For the architectural source of truth (workflow, states, rules), see [PROTOCOL.md](PROTOCOL.md).
+> For first-time setup and onboarding, start with [README.md](../README.md). For the architectural source of truth (workflow, states, rules), see [protocol.md](protocol.md).
+
+## Setup
+
+Run all commands from the repository root. Use the Node 24 patch in `.nvmrc` and
+its supported npm toolchain. Install from the committed lockfile:
+
+```bash
+nvm install
+nvm use
+npm ci
+npx playwright install chromium
+cp .env.example .env
+```
+
+`npm ci` installs Husky through the prepare lifecycle. `npm exec husky` reinstalls
+hooks if needed. Keep local credentials in ignored `.env` files.
+
+## Configuration
+
+| Setting | Default | Scope |
+| --- | --- | --- |
+| `BASE_URL` | `https://www.saucedemo.com` | Live suite, loaded from `.env`; existing shell values take precedence |
+| `PLAYWRIGHT_TIMEOUT` | 45000 ms | Live test timeout, positive integer milliseconds |
+| `CI` | Unset locally | Live suite forbids focus, uses one worker and two retries when set |
+| Smoke target | `http://127.0.0.1:4173` | Fixed controlled fixture; does not read `.env` |
+
+Smoke and live configs write ignored reports and results. The lifecycle CLI/MCP
+write ignored logs and may change task files; avoid running task verification
+against historical tasks merely to check repository maintenance.
+
+## Quality checks
+
+```bash
+npm run check                # offline checks and unit tests
+npm run test:smoke           # controlled Chromium tests, no public-site requests
+npx playwright test --list   # discover eight live tests, no browser execution
+npm test                    # live Sauce Demo suite
+npx lint-staged --diff HEAD  # check changed files without committing
+```
+
+`npm run check` runs code/Markdown lint, formatter checks, TypeScript, config/text
+validation, selector health and unit tests. Use `npm run format` to format locally,
+review the diff and restage intended changes. Markdown uses markdownlint-cli2 with
+default rules except line length; generated agents/skills and planner output are
+excluded. Those files must be regenerated rather than hand-edited.
+
+Husky runs lint-staged against staged files only, hiding tracked unstaged changes
+while tools run and restoring them afterward. ESLint, Prettier, Markdown,
+selector and config/text checks use the same locked versions as CI. Partial-file
+staging is preserved; no checks fall back to unstaged changes. JSON is strict;
+JSONC permits comments/trailing commas; YAML rejects malformed or duplicate keys.
+Markdown two-space hard breaks are preserved. Failed hooks block commits.
+
+The `Quality and unit tests` job runs all maintained-file checks and live test
+collection. `Controlled Chromium smoke` runs two browser checks against a local
+fixture server: login through the existing logged-in fixture and denied-login
+error dismissal through the existing LoginPage. Browser requests outside the
+loopback origin fail. This validates SPP fixture/Page Object wiring, not the
+public application's implementation. Live tests require network access to the
+configured application and must be run separately for integration changes.
+Failure artifacts are retained for three days.
+
+To add behavior, keep offline gate tests in `tests/unit/`, controlled browser
+checks in `tests/smoke/` and live specs directly under `tests/`. The live config
+excludes the other suites; the smoke config only discovers its own specs. Keep
+selectors in Page Objects and import browser fixtures from `tests/fixtures.ts`.
 
 ## Commands
 
@@ -132,7 +198,7 @@ The log includes stdout, stderr, lint failures, and Playwright failures. **Alway
 
 ## Playwright Agent Tooling
 
-Everything below ships with `@playwright/test` (1.63.0), so it always matches the installed version. No global installs are required.
+Everything below ships with the locked `@playwright/test` package, so it always matches the installed version. No global installs are required.
 
 ### Agent CLI (recommended for exploration)
 
@@ -201,9 +267,13 @@ All of them use the Playwright Test MCP server: `npx playwright run-test-mcp-ser
 #### Regenerating after a Playwright upgrade
 
 ```bash
-npm install -D @playwright/test@<version>
+# Replace VERSION with the reviewed stable version.
+npm install -D @playwright/test@VERSION
 npm run agents
-npm run lint
+npm run format
+npm run check
+npm run test:smoke
+npm test
 ```
 
 `npm run agents` overwrites the generated definitions, `.mcp.json` and `opencode.json`. It keeps `tests/seed.spec.ts`, `specs/README.md` and the SPP-customized `.github/workflows/copilot-setup-steps.yml`, and removes the component-testing skill (not used by this suite). Do not hand-edit generated files; SPP rules are enforced by the verification gate.
@@ -248,7 +318,7 @@ Ensure the task body includes exactly one line like this:
 
 ### `No raw locators in specs`
 
-Lint found a selector in a `.spec.ts` file, usually in a generator draft. Move it into a Page Object and call the Page Object from the spec (the Promote phase in [PROTOCOL.md](PROTOCOL.md)).
+Lint found a selector in a `.spec.ts` file, usually in a generator draft. Move it into a Page Object and call the Page Object from the spec (the Promote phase in [protocol.md](protocol.md)).
 
 ### Task blocked with `regression`
 
@@ -271,10 +341,92 @@ echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":
 | File | Purpose |
 | :--- | :--- |
 | [../README.md](../README.md) | Onboarding and quick start. |
-| [PROTOCOL.md](PROTOCOL.md) | **Architectural source of truth**: workflow, states, and rules. |
-| [ROADMAP.md](ROADMAP.md) | Future enhancements and planned improvements. |
+| [protocol.md](protocol.md) | **Architectural source of truth**: workflow, states, and rules. |
+| [roadmap.md](roadmap.md) | Future enhancements and planned improvements. |
 | [../AGENTS.md](../AGENTS.md) | Lightweight instructions for AI assistants. |
 | [../scripts/task.ts](../scripts/task.ts) | Task runner implementation. |
 | [../scripts/gate.ts](../scripts/gate.ts) | Shared verification-gate checks. |
 | [../scripts/agents.ts](../scripts/agents.ts) | Regenerates Playwright agents and skills. |
 | [../mcp/server.ts](../mcp/server.ts) | Custom protocol lifecycle MCP server. |
+
+## Standards adoption
+
+Profile: `complete`. Pinned standards:
+[`a429dd2f2da55a4c3e1c73c7c0d1111f9cd0b9a9`](https://github.com/yashwant-das/repo-standards/tree/a429dd2f2da55a4c3e1c73c7c0d1111f9cd0b9a9).
+The [protocol guide](protocol.md) is the architecture guide, using the explicit
+protocol alternative in the adoption matrix. Maintained guides use lowercase
+names; generated Playwright files and plans remain generator-owned.
+
+### Dependency compatibility review
+
+Registry metadata was reviewed on 2026-10-28. The supported runtime remains Node
+24, tested at 24.22.1; engines intentionally exclude unverified future majors.
+Playwright 1.64.1 and its matching Chromium build passed the existing eight live
+tests and the two controlled tests. Its generated agents/skills were refreshed
+with `npm run agents`, preserving the customized Copilot workflow.
+
+TypeScript 7.0.2 is available but outside typescript-eslint 8.72.1's declared
+`>=4.8.4 <6.1.0` compatibility range. Use 6.0.3, the latest supported stable line;
+owner: Yashwant Das; review when the parser supports TypeScript 7. ESLint 10 and
+JSDoc 65 satisfy their declared peers and pass the maintained code checks.
+NodeNext resolution supports current ESM dependency interop from the existing
+CommonJS application; ES2023 matches APIs available in Node 24. The existing
+ts-node task entrypoint and CLI help were verified without task-state changes.
+
+Compatible audit fixes removed the high/critical findings. npm audit still
+reports four low-severity entries in one transitive chain:
+markdownlint-cli2 → markdownlint → micromark-extension-math → KaTeX
+([GHSA-238p-pmpm-9mq7](https://github.com/advisories/GHSA-238p-pmpm-9mq7)).
+The latest markdownlint-cli2 release still resolves the affected dependency.
+The reported automatic fix downgrades the Markdown tool to 0.16.0; it was not
+applied. The dependency is a local/CI development tool, not a hosted application.
+Treat this as an unresolved dependency review, not an approved exception or a
+claim of safety. Owner: Yashwant Das; review on an upstream fixed dependency
+release or before processing untrusted math content. A cross-major override
+requires compatibility review rather than a forced audit fix.
+
+### Verification evidence
+
+Local checks on 2026-10-28 under Node 24.22.1:
+
+| Check | Evidence |
+| --- | --- |
+| Offline quality | ESLint, markdownlint-cli2, Prettier, TypeScript, config/text and selector checks pass |
+| Unit behavior | 16 tests pass: declared files/plans, gate reasons, state persistence, text/config rejection and hard-wait rejection outside specs |
+| Controlled Chromium | 2 tests pass; local fixture, external request guard and existing Page Objects/fixtures |
+| Live Sauce Demo | 8 tests pass; no skipped tests; this is separate from controlled CI evidence |
+| Actual commit hooks | 18 disposable-repository probes pass, including invalid inputs, hard waits, filenames with spaces, deletions, generated-plan exclusion, unrelated unstaged Markdown/config and partial Markdown/TypeScript preservation |
+
+Clean `npm ci` in a disposable checkout also passed offline checks, both controlled
+tests, all eight live tests and CLI help under Node 24.22.1. Both Mermaid diagrams
+rendered in Chromium and were visually inspected; 26 maintained local links and
+anchors resolved. MCP initialization, discovery of five tools and read-only
+`list_tasks` succeeded with the refreshed SDK.
+
+Fresh whole-change review identified one removed hard-wait gate outside specs;
+real-file ESLint tests reproduced it before the fix and pass afterward. Global
+hard-wait/networkidle rules now cover maintained TypeScript, with locator rules
+remaining spec-specific. The reviewer verified the fix; no other actionable
+findings remained.
+
+Selector dates older than 90 days remain advisory warnings; this adoption does
+not rewrite metadata to imply a new manual locator review. Hosted CI is separate
+from local evidence and must pass on the PR revision before merge.
+
+### Repository settings requiring owner review
+
+The repository is public. The active `default-branch-protection` ruleset prevents
+deletion and non-fast-forward updates only. The legacy branch-protection endpoint
+returns 404, and the ruleset has no required checks. Proposed required checks:
+`Quality and unit tests` and `Controlled Chromium smoke`. Workflow presence alone
+does not enforce them for merging.
+
+The repository API reports secret scanning, push protection and Dependabot
+security updates disabled. The code-scanning endpoint returned 404 (`no analysis
+found`), with a scope notice; no enabled scanning or alert-free claim is made.
+Propose enabling supported secret/code scanning and security updates after owner
+review. No repository/account settings were changed by this adoption.
+
+Proposed public metadata, not applied: description
+“Guides Playwright and TypeScript agents through Markdown tasks and verified Page Object tests”;
+topics: `ai-testing`, `typescript`, `playwright`, `mcp`, `ai-agents`.

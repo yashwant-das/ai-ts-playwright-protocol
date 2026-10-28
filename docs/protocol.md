@@ -1,9 +1,5 @@
 # Smart Playwright Protocol (SPP) v3.0.0
 
-## Architecture & Design Principles
-
----
-
 ## Vision
 
 Smart Playwright Protocol (SPP) is a protocol-driven workflow for AI-assisted Playwright automation.
@@ -54,6 +50,50 @@ This mirrors how experienced SDETs approach automation work, with each phase now
 ---
 
 ## Architecture
+
+### Execution boundaries
+
+The CLI and lifecycle MCP server share file checks and status writes through
+`scripts/gate.ts`. Each interface runs lint and the declared live Playwright test
+before recording DONE. Task state remains in Markdown; logs and browser artifacts
+are local ignored output. No hosted database or LLM service is part of SPP.
+
+Playwright creates a fresh browser context per test. Fixtures construct Page
+Objects in that context; `loggedInPage` authenticates before yielding the inventory
+Page Object. The live suite contacts the configured `BASE_URL` (Sauce Demo by
+default). Controlled CI smoke tests use a separate loopback server and block
+non-loopback requests; they prove fixture/Page Object wiring, not Sauce Demo behavior.
+
+```mermaid
+sequenceDiagram
+    actor Developer
+    participant Interface as Task CLI or lifecycle MCP
+    participant Task as Task Markdown
+    participant Gate as Shared static gate
+    participant Runner as Playwright and fixtures
+    Developer->>Interface: Activate eligible task
+    Interface->>Task: TODO to IN_PROGRESS
+    Developer->>Interface: Verify declared test
+    Interface->>Gate: Check declared files and skip/fixme
+    Gate-->>Interface: Files or typed block reason
+    alt Static checks pass
+        Interface->>Interface: Run lint
+        Interface->>Runner: Run declared live test
+        Runner->>Runner: Fresh context and Page Objects
+        Runner-->>Interface: Result and artifacts
+    end
+    alt Every gate passes
+        Interface->>Task: DONE and completed criteria
+    else Any gate fails
+        Interface->>Task: BLOCKED with reason
+        Interface-->>Developer: Logs and recovery prompt
+    end
+```
+
+File-backed state makes tasks reviewable but assumes one active task and one
+writer. Playwright supplies agent capabilities; SPP retains the completion contract.
+Local controlled tests keep PR checks deterministic; public-site runs remain a
+separate compatibility check.
 
 ### Core Components
 
@@ -297,7 +337,7 @@ Task cannot continue or verification failed. The gate records the block reason.
 #### Block Reason Definitions
 
 | Block Reason | Meaning |
-|---|---|
+| --- | --- |
 | `dependency` | Waiting on another task to be completed. |
 | `requirement` | Missing clarification or business requirement. |
 | `selector` | UI locator issue preventing progress. |
@@ -364,7 +404,9 @@ Risk:
 
 ### Pre-Commit
 
-Fast, local validation:
+Fast staged-only validation through Husky and lint-staged:
+
+- Markdown, formatter and config/text syntax checks use the same locked tools as CI.
 
 - **lint-staged**: ESLint on changed files.
 - **Selector Health Check**: ARIA-first locators in Page Objects; warns on `@verified` dates older than 90 days.
@@ -378,7 +420,7 @@ Fast, local validation:
 npm run task <TASK_ID>
 ```
 
-Runs the static checks, `npm run lint` and the task's test, locally. Tests are not run in CI: CI runs `npm run lint` and `npx playwright test --list` (specs load, no browser) on every push and pull request.
+Runs the static checks, `npm run lint` and the task's test, locally. CI runs offline quality checks, gate unit tests, live-suite collection and controlled Chromium smoke tests. Public Sauce Demo tests run separately; see [development](development.md#quality-checks).
 
 ---
 
@@ -504,9 +546,9 @@ Regenerate Agents (npm run agents)
 
 ```text
 README.md        onboarding, quick start
-docs/PROTOCOL.md architectural source of truth: workflow, states, rules, gates
-docs/CLI.md      commands, agents and MCP setup, troubleshooting
-docs/ROADMAP.md  planned improvements
+docs/protocol.md architectural source of truth: workflow, states, rules, gates
+docs/development.md      commands, agents and MCP setup, troubleshooting
+docs/roadmap.md  planned improvements
 AGENTS.md        instructions for AI assistants (CLAUDE.md imports it)
 ```
 

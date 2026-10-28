@@ -2,6 +2,13 @@
 
 SPP prioritizes simplicity, verification-first development, and practical automation workflows. Roadmap items should improve usability and operational maturity without increasing architectural complexity.
 
+## Current maintenance baseline
+
+The sections below record release history, including decisions later superseded.
+Current setup, runtime declarations and CI behavior are authoritative in the
+[development guide](development.md): Node 24, offline unit checks and controlled
+Chromium smoke run in CI; public Sauce Demo tests run separately.
+
 ## v2.1 — Operational Maturity & Stability (Completed)
 
 Purpose: Improve onboarding, stability, and AI agent experience without changing protocol architecture.

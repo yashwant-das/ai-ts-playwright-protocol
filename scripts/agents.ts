@@ -28,8 +28,8 @@ const PRESERVED_FILES = ['.github/workflows/copilot-setup-steps.yml'];
  * @param args Arguments passed to `npx playwright`.
  */
 function playwright(args: string[]): void {
-    console.log(pc.dim(`> npx playwright ${args.join(' ')}`));
-    execFileSync('npx', ['playwright', ...args], { cwd: ROOT, stdio: 'inherit' });
+  console.log(pc.dim(`> npx playwright ${args.join(' ')}`));
+  execFileSync('npx', ['playwright', ...args], { cwd: ROOT, stdio: 'inherit' });
 }
 
 /**
@@ -37,48 +37,52 @@ function playwright(args: string[]): void {
  * @returns A map of relative path to file content for files that exist.
  */
 function snapshotPreserved(): Map<string, string> {
-    const saved = new Map<string, string>();
-    for (const rel of PRESERVED_FILES) {
-        const abs = path.join(ROOT, rel);
-        if (fs.existsSync(abs)) saved.set(rel, fs.readFileSync(abs, 'utf8'));
-    }
-    return saved;
+  const saved = new Map<string, string>();
+  for (const rel of PRESERVED_FILES) {
+    const abs = path.join(ROOT, rel);
+    if (fs.existsSync(abs)) saved.set(rel, fs.readFileSync(abs, 'utf8'));
+  }
+  return saved;
 }
 
 /**
  * Entry point. Regenerates agents and skills for the requested loops.
  */
 function main(): void {
-    const requested = process.argv.slice(2);
-    const unknown = requested.filter(l => !AGENT_LOOPS.includes(l));
-    if (unknown.length > 0) {
-        console.error(pc.red(`Unknown loop(s): ${unknown.join(', ')}. Supported: ${AGENT_LOOPS.join(', ')}`));
-        process.exit(1);
+  const requested = process.argv.slice(2);
+  const unknown = requested.filter((l) => !AGENT_LOOPS.includes(l));
+  if (unknown.length > 0) {
+    console.error(
+      pc.red(`Unknown loop(s): ${unknown.join(', ')}. Supported: ${AGENT_LOOPS.join(', ')}`),
+    );
+    process.exit(1);
+  }
+  const loops = requested.length > 0 ? requested : AGENT_LOOPS;
+
+  const saved = snapshotPreserved();
+
+  for (const loop of loops) {
+    playwright(['init-agents', `--loop=${loop}`]);
+  }
+
+  // Claude Code reads .claude/skills; Codex, OpenCode and Copilot read .agents/skills.
+  const skillLoops = loops.includes('claude')
+    ? SKILL_LOOPS
+    : SKILL_LOOPS.filter((l) => l !== 'claude');
+  for (const loop of skillLoops) {
+    playwright(['init-skills', `--loop=${loop}`]);
+    for (const skill of UNUSED_SKILLS) {
+      fs.rmSync(path.join(ROOT, `.${loop}`, 'skills', skill), { recursive: true, force: true });
     }
-    const loops = requested.length > 0 ? requested : AGENT_LOOPS;
+  }
 
-    const saved = snapshotPreserved();
+  for (const [rel, content] of saved) {
+    fs.writeFileSync(path.join(ROOT, rel), content);
+    console.log(pc.dim(`Restored SPP-customized ${rel}`));
+  }
 
-    for (const loop of loops) {
-        playwright(['init-agents', `--loop=${loop}`]);
-    }
-
-    // Claude Code reads .claude/skills; Codex, OpenCode and Copilot read .agents/skills.
-    const skillLoops = loops.includes('claude') ? SKILL_LOOPS : SKILL_LOOPS.filter(l => l !== 'claude');
-    for (const loop of skillLoops) {
-        playwright(['init-skills', `--loop=${loop}`]);
-        for (const skill of UNUSED_SKILLS) {
-            fs.rmSync(path.join(ROOT, `.${loop}`, 'skills', skill), { recursive: true, force: true });
-        }
-    }
-
-    for (const [rel, content] of saved) {
-        fs.writeFileSync(path.join(ROOT, rel), content);
-        console.log(pc.dim(`Restored SPP-customized ${rel}`));
-    }
-
-    console.log(pc.green(`\nRegenerated Playwright agents for: ${loops.join(', ')}`));
-    console.log('Review the diff, then run `npm run lint` before committing.');
+  console.log(pc.green(`\nRegenerated Playwright agents for: ${loops.join(', ')}`));
+  console.log('Review the diff, then run `npm run lint` before committing.');
 }
 
 main();

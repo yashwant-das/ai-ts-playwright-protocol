@@ -6,11 +6,15 @@ import path from 'path';
 dotenv.config({ path: path.resolve(__dirname, '.env'), quiet: true });
 
 if (!process.env.BASE_URL) {
-  console.warn('\x1b[33m%s\x1b[0m', 'Warning: BASE_URL is not set. Falling back to default Sauce Demo URL.');
+  console.warn(
+    '\x1b[33m%s\x1b[0m',
+    'Warning: BASE_URL is not set. Falling back to default Sauce Demo URL.',
+  );
 }
 
 export default defineConfig({
   testDir: './tests',
+  testIgnore: ['unit/**', 'smoke/**'],
 
   // Maximum time one test can run
   timeout: process.env.PLAYWRIGHT_TIMEOUT ? parseInt(process.env.PLAYWRIGHT_TIMEOUT) : 45 * 1000,
@@ -22,11 +26,7 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
 
   // Reporter configuration
-  reporter: [
-    ['html'],
-    ['list'],
-    ['json', { outputFile: 'test-results/test-results.json' }]
-  ],
+  reporter: [['html'], ['list'], ['json', { outputFile: 'test-results/test-results.json' }]],
 
   // Shared settings
   use: {

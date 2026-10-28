@@ -1,11 +1,11 @@
 ---
 id: T-###
-title: <Task Title>
+title: Task title
 status: TODO
 dependsOn: []
 ---
 
-T-###: <Task Title>
+T-###: Task title
 
 ## Understanding
 
