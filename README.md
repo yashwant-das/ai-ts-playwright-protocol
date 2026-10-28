@@ -1,6 +1,6 @@
 # Smart Playwright Protocol (SPP)
 
-AI-assisted test automation in TypeScript, combining Playwright agents and skills with MCP tools, Page Objects and task-level verification.
+AI-assisted Playwright testing through an interactive TypeScript CLI, with agent skills, MCP tools, Page Objects and task-level verification.
 
 [![Verify](https://github.com/yashwant-das/ai-ts-playwright-protocol/actions/workflows/verify.yml/badge.svg)](https://github.com/yashwant-das/ai-ts-playwright-protocol/actions/workflows/verify.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -17,11 +17,44 @@ SPP builds on Playwright's [planner, generator and healer agents](https://playwr
 
 | Engineering capability | Implementation in this repository |
 | --- | --- |
+| Interactive developer workflow | A [TypeScript CLI](scripts/task.ts) built with `@clack/prompts`: task menu, creation wizard, status board, clipboard handoff and guided verification/recovery output |
 | AI-assisted test development | Version-matched planner, generator and healer [agent definitions](.github/agents/) for turning requirements into plans, executable tests and repair attempts |
 | Agent skills for exploration and debugging | Committed [playwright-cli](.agents/skills/playwright-cli/SKILL.md) and [playwright-trace](.agents/skills/playwright-trace/SKILL.md) skills covering browser sessions, locator generation and trace investigation |
 | MCP integration | Playwright Test MCP supplies browser/test tools to the agents; the TypeScript [SPP lifecycle MCP server](mcp/server.ts) exposes task creation, activation, verification, board listing and dependency queries |
 | Maintainable test architecture | Typed [Page Objects](pages/), ARIA-first locators and [shared fixtures](tests/fixtures.ts), with business assertions in the specs |
 | Traceable work and repeatable verification | Markdown [tasks](tasks/) linked to [test plans](specs/), a shared CLI/MCP gate, staged quality checks and controlled Chromium CI |
+
+## Interactive CLI
+
+Run `npm run task` in a terminal to open the menu: activate or resume work, verify
+the active task, view the board, inspect blocked tasks or create a task through
+the guided wizard. You can also go directly to a task with `npm run task <TASK_ID>`.
+
+Activation excerpt for a task in `TODO`:
+
+```text
+❯ npm run task T-005
+┌   SPP  Smart Playwright Protocol v3.0.0
+│
+●  T-005 Verify Footer Social Links TODO · activate
+│
+◆  T-005 TODO → IN PROGRESS
+│
+●  Handoff prompt · copied to clipboard ✓
+
+Read docs/protocol.md
+
+Task: T-005 Verify Footer Social Links
+Task file: tasks/T-005_Footer.md
+```
+
+The printed prompt continues with the protocol steps and the verification command.
+Paste it into your AI assistant, then run the task command again when the test is
+ready. Verification shows each gate's progress and result; failures include error
+excerpts and a recovery prompt. The CLI prints the handoff even when clipboard
+access is unavailable and uses plain output without interactive prompts when
+piped or run in CI. See the [CLI reference](docs/development.md#interactive-and-non-interactive-output)
+for command behavior.
 
 ## Architecture
 
@@ -130,7 +163,7 @@ Versions below match the committed [package manifest](package.json), [lockfile](
 
 ## Usage
 
-The task commands above create, activate and verify file-backed work. For command details, configuration and assistant setup, see the [development guide](docs/development.md).
+Use `npm run task` for the interactive menu, `npm run task create` for the creation wizard and `npm run task status` for the task board. For task selection, verification, configuration and assistant setup, see the [development guide](docs/development.md).
 
 ## Documentation
 
