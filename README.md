@@ -86,18 +86,38 @@ Exact dependency versions are in the [manifest](package.json) and [lockfile](pac
 
 ### Project structure
 
+Key paths:
+
 ```text
+ai-ts-playwright-protocol/
 ├── docs/                       # Protocol, development guide and roadmap
-├── tasks/                      # Task objectives, criteria, dependencies and state
+├── tasks/                      # Requirements, criteria, dependencies and state
 ├── specs/                      # Scenario plans linked to tasks
 ├── pages/                      # Page Objects and shared components
-├── tests/                      # Live specs, fixtures, seeds, unit/ and smoke/
-├── scripts/                    # Task CLI, gate, agent regeneration and checks
-├── mcp/                        # SPP lifecycle MCP server
+├── tests/                      # Live specs and seeds
+│   ├── fixtures.ts             # Shared Page Object and login fixtures
+│   ├── unit/                   # Gate, text/config and lint-rule tests
+│   └── smoke/                  # Controlled Chromium specs and local fixture server
+├── scripts/
+│   ├── task.ts                 # Interactive terminal CLI
+│   ├── gate.ts                 # Shared static checks and status writes
+│   ├── agents.ts               # Regenerates Playwright agents and skills
+│   ├── check-selectors.ts      # Page Object locator checks
+│   └── check-text.ts           # Text/config validation
+├── mcp/
+│   └── server.ts               # SPP lifecycle MCP tools
 ├── types/                      # Task types
-├── .claude/ .github/agents/ .codex/ .opencode/ .agents/
-│                               # Generated agent definitions and skills
-├── AGENTS.md                   # Agent instructions; imported by CLAUDE.md
+├── .agents/skills/             # Shared Playwright browser and trace skills
+├── .claude/                    # Claude Code agent definitions and skills
+├── .codex/agents/              # Codex agent definitions
+├── .github/
+│   ├── agents/                 # VS Code / Copilot agent definitions
+│   └── workflows/              # Verification and Copilot setup workflows
+├── .opencode/prompts/          # OpenCode agent definitions
+├── AGENTS.md                   # Repository instructions for AI assistants
+├── CLAUDE.md                   # Imports AGENTS.md
+├── package.json                # Commands and dependencies
+├── package-lock.json           # Resolved dependency versions
 ├── playwright.config.ts        # Live suite
 └── playwright.smoke.config.ts  # Controlled loopback suite
 ```
