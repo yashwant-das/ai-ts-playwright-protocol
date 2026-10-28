@@ -180,6 +180,12 @@ The gate runs, in order:
 2. `npm run lint`: ESLint, including the rule that rejects `page.getBy*()`, `page.locator()` and selector-string page actions in `.spec.ts` files, plus markdownlint.
 3. `npm test <declared-test-file>`.
 
+The task gate runs lint and the declared test, not the full `npm run check`
+maintenance command. It scans skip/fixme calls in the declared source and uses
+the test command exit code; it does not prove semantic coverage or inspect every
+imported/runtime skip. Review acceptance criteria before running the gate: a
+successful DONE write checks off their boxes automatically.
+
 The block reason is written to the task's front-matter.
 
 ### Protocol Enforcement

@@ -4,7 +4,7 @@
 
 Smart Playwright Protocol (SPP) is a protocol-driven workflow for AI-assisted Playwright automation.
 
-Playwright now ships its own agent tooling: a token-efficient browser CLI, agent skills, and the planner, generator and healer Test Agents. SPP does not compete with that tooling. It puts a contract around it.
+Playwright now ships its own agent tooling: a browser CLI, agent skills, and the planner, generator and healer Test Agents. SPP does not compete with that tooling. It puts a contract around it.
 
 **SPP is the contract; Playwright's agents are the workforce.**
 
@@ -56,7 +56,8 @@ This mirrors how experienced SDETs approach automation work, with each phase now
 The CLI and lifecycle MCP server share file checks and status writes through
 `scripts/gate.ts`. Each interface runs lint and the declared live Playwright test
 before recording DONE. Task state remains in Markdown; logs and browser artifacts
-are local ignored output. No hosted database or LLM service is part of SPP.
+are local ignored output. SPP does not provision a hosted database or call an
+LLM API itself; any AI-service usage belongs to the chosen assistant.
 
 Playwright creates a fresh browser context per test. Fixtures construct Page
 Objects in that context; `loggedInPage` authenticates before yielding the inventory
@@ -142,7 +143,7 @@ Everything Playwright provides for agents, version-matched to the installed `@pl
 
 | Tool | What it is | Used in |
 | --- | --- | --- |
-| `npx playwright cli` (Agent CLI) | Token-efficient browser driver: `snapshot`, `find`, `click e15`, `generate-locator`, sessions, `show` dashboard | Explore, Promote, Recover |
+| `npx playwright cli` (Agent CLI) | Browser driver: `snapshot`, `find`, `click e15`, `generate-locator`, sessions, `show` dashboard | Explore, Promote, Recover |
 | `npx playwright test --debug=cli` | Pauses a real test so the CLI can `attach` to it | Explore, Recover |
 | `npx playwright trace` | Reads trace files from the terminal | Recover |
 | Agent skills (`playwright-cli`, `playwright-trace`) | Instructions that teach assistants the CLI | All phases |
@@ -264,7 +265,7 @@ Bring the implementation in line with the SPP architecture:
 5. Ensure assertions validate business outcomes from the Acceptance Criteria.
 6. The gate verifies one test file per task. The generator writes one file per scenario, so merge the generated scenarios into the task's `- **Test File:**` (one `describe`, one `test` per scenario) and delete the drafts.
 
-Lint enforces the result: any `page.getBy*()`, `page.locator()` or selector-string `page.click('...')` left in a `.spec.ts` file fails the gate.
+Lint rejects common direct `page.getBy*()`, `page.locator()` and selector-string `page.click('...')` calls in `.spec.ts` files. Page Object use, fixture imports, selector metadata and acceptance-criteria coverage remain project rules to review; the gate does not prove all of them.
 
 ---
 
@@ -278,7 +279,15 @@ The gate runs, in order:
 
 1. Static checks: the declared test file (and spec, if any) exists; the test file contains no `test.fixme()` or `test.skip()`.
 2. `npm run lint`: ESLint (no raw locators in specs, no focused tests, no hard waits, typed code) and markdownlint.
-3. The task's Playwright test.
+3. The task's Playwright test file, with success determined by the command exit code.
+
+The static scan checks skip/fixme call patterns in the declared test source; it
+does not inspect every imported helper or runtime skip. The gate does not check
+Understanding completeness, acceptance-criteria coverage or assertion semantics.
+A successful status write checks off remaining acceptance boxes, so review those
+criteria before verification rather than treating the checkboxes as independent
+evidence. Full repository checks (`npm run check`) also include formatting, types
+and unit tests; task verification runs `npm run lint`, not that full command.
 
 Outcome:
 
@@ -428,7 +437,7 @@ Runs the static checks, `npm run lint` and the task's test, locally. CI runs off
 
 #### Page Objects Own Selectors
 
-All selectors live in Page Objects with JSDoc metadata. Specs call Page Objects and fixtures; they never locate elements on `page`. Enforced by ESLint for `.spec.ts` files.
+SPP requires selectors in Page Objects with JSDoc metadata and specs that use Page Objects and fixtures. ESLint rejects common direct locator calls in specs; selector health rejects non-ARIA locator calls in Page Objects and warns on old verification dates. These checks do not establish that every property has metadata or that every spec imports the shared fixtures.
 
 ---
 
@@ -532,7 +541,7 @@ Regenerate Agents (npm run agents)
 - **Markdown Tasks and Test Plans**: file-backed units of work linked to `specs/` plans.
 - **Task CLI and Lifecycle MCP**: task management and the verification gate.
 - **Playwright Agent Tooling**: Agent CLI, skills and Test Agents (planner, generator, healer), regenerated per Playwright release.
-- **Quality Gates**: automated enforcement of Page Objects and Playwright best practices.
+- **Quality Gates**: declared-file checks, skip/fixme source scanning, lint rules and task test execution.
 
 ### Excluded
 
