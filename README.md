@@ -1,6 +1,6 @@
 # Smart Playwright Protocol (SPP)
 
-A workflow for AI-assisted Playwright testing with file-backed tasks, Page Objects and a shared verification gate.
+AI-assisted test automation in TypeScript, combining Playwright agents and skills with MCP tools, Page Objects and task-level verification.
 
 [![Verify](https://github.com/yashwant-das/ai-ts-playwright-protocol/actions/workflows/verify.yml/badge.svg)](https://github.com/yashwant-das/ai-ts-playwright-protocol/actions/workflows/verify.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -9,9 +9,19 @@ A workflow for AI-assisted Playwright testing with file-backed tasks, Page Objec
 
 ## Why it exists
 
-Playwright provides [planner, generator and healer agents](https://playwright.dev/docs/test-agents): the planner writes Markdown plans, the generator creates tests, and the healer repairs failures or marks a test to skip. SPP adds task state and project rules around those tools. Each task records its objective, acceptance criteria, test file and optional plan.
+AI-generated tests need a clear link to the requested behavior, maintainable selectors and a repeatable way to verify the result. Smart Playwright Protocol gives that work a file-backed lifecycle: understand the requirement, explore the app, plan scenarios, generate tests, promote selectors into Page Objects, then verify and recover from failures.
 
-Generated tests are promoted into Page Objects before the shared CLI/MCP gate checks declared files, scans the declared test source for skip/fixme calls, runs lint and executes that test file. Passing checks allow the task to move to `DONE`. Acceptance-criteria coverage and assertion quality still need review.
+SPP builds on Playwright's [planner, generator and healer agents](https://playwright.dev/docs/test-agents). Browser and trace skills guide the assistant's exploration and debugging. MCP tools give agents access to browser/test operations and let a configured assistant manage SPP tasks through the same verification gate as the CLI.
+
+## What this demonstrates
+
+| Engineering capability | Implementation in this repository |
+| --- | --- |
+| AI-assisted test development | Version-matched planner, generator and healer [agent definitions](.github/agents/) for turning requirements into plans, executable tests and repair attempts |
+| Agent skills for exploration and debugging | Committed [playwright-cli](.agents/skills/playwright-cli/SKILL.md) and [playwright-trace](.agents/skills/playwright-trace/SKILL.md) skills covering browser sessions, locator generation and trace investigation |
+| MCP integration | Playwright Test MCP supplies browser/test tools to the agents; the TypeScript [SPP lifecycle MCP server](mcp/server.ts) exposes task creation, activation, verification, board listing and dependency queries |
+| Maintainable test architecture | Typed [Page Objects](pages/), ARIA-first locators and [shared fixtures](tests/fixtures.ts), with business assertions in the specs |
+| Traceable work and repeatable verification | Markdown [tasks](tasks/) linked to [test plans](specs/), a shared CLI/MCP gate, staged quality checks and controlled Chromium CI |
 
 ## Architecture
 
@@ -24,6 +34,8 @@ flowchart LR
     AI -->|explores via| PWCLI[Playwright Agent CLI<br/>+ skills]
     AI -->|delegates to| Agents[Playwright Test Agents<br/>planner / generator / healer]
     Agents -->|plans| Specs[(specs/*.plan.md)]
+    Agents -->|uses| TestMCP[Playwright Test MCP<br/>browser and test tools]
+    TestMCP -->|executes and debugs| Code
     AI -->|updates state| SPPMCP[SPP lifecycle MCP<br/>mcp/server.ts]
     SPPMCP --> Tasks
     Agents -->|draft tests| Code[pages/ + tests/]
@@ -34,7 +46,9 @@ flowchart LR
     Gate -->|fail| Blocked[BLOCKED, then recover<br/>healer, --debug=cli, trace]
 ```
 
-The task CLI prints a handoff prompt and attempts to copy it to the clipboard. You give that prompt to your configured assistant, which can use Playwright's CLI and agents to explore, plan, generate and repair tests. SPP requires selectors in Page Objects. The task CLI and optional lifecycle MCP server run the same completion checks; neither starts an AI assistant automatically.
+The assistant uses Playwright skills and agents to explore the application, produce a scenario plan and generate tests. Page Objects and fixtures provide the shared test architecture. The healer and trace skill support failure investigation, while the verification gate records the task result.
+
+The two MCP integrations serve different roles: **Playwright Test MCP** provides the agents' browser and test tools; **SPP lifecycle MCP** exposes the repository's task workflow to a configured assistant. The CLI offers the same task operations through terminal commands. See the [protocol guide](docs/protocol.md) for component boundaries and the [development guide](docs/development.md#playwright-agent-tooling) for assistant setup.
 
 Every task follows one workflow:
 
@@ -77,6 +91,8 @@ Playwright agent definitions and skills are committed for the supported assistan
 - CI runs the offline checks, collects the live suite and executes controlled smoke tests on pushes and PRs to `main`.
 - `npx playwright show-report` opens the last live HTML report. Smoke reports are in `playwright-report/smoke`; CI retains failures for three days.
 
+The task gate checks declared files and skip/fixme source patterns, runs lint and executes the task's test file. Acceptance-criteria coverage and assertion quality remain part of review; [gate details](docs/protocol.md#phase-7--verify) describe the automated checks.
+
 The live suite targets public Sauce Demo by default; `BASE_URL` can override it. Locally, failing live tests get one retry; with `CI` set, they get two. A trace is captured on the first retry. Controlled smoke tests use the loopback fixture, have no retries and retain a trace on failure.
 
 ## Tech stack
@@ -87,10 +103,10 @@ Versions below match the committed [package manifest](package.json), [lockfile](
 | --- | --- | --- | --- |
 | Runtime | Node.js | 24.22.1 | Shared local and CI baseline |
 | Test runner | Playwright Test | 1.64.1 | Auto-waiting locators, traces and an HTML report out of the box |
-| Agent tooling | Playwright Agent CLI, Test Agents, skills | 1.64.1 (bundled) | Browser exploration, planning, generation and healing |
+| Agent tooling | Playwright Agent CLI, Test Agents, skills | 1.64.1 (bundled) | Browser exploration, scenario planning, test generation and failure investigation |
 | Language | TypeScript | 6.0.3 | Typed page objects and task schemas |
 | Task CLI | ts-node, @clack/prompts | 10.9.2, 1.8.1 | Interactive task creation and state changes |
-| Assistant tooling | Model Context Protocol SDK | 1.32.2 | Exposes the task lifecycle to the assistant |
+| MCP integration | Playwright Test MCP; Model Context Protocol SDK | 1.64.1; 1.32.2 | Browser/test tools for agents; SPP task tools for assistants |
 | Schema validation | zod | 4.6.7 | Validates MCP tool inputs |
 | Quality gates | ESLint, Prettier, markdownlint-cli2, Husky, lint-staged | 10.13.0, 3.9.10, 0.24.0, 9.1.7, 17.6.0 | Staged hooks, offline checks and controlled browser CI |
 
