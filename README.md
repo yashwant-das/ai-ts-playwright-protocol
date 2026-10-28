@@ -1,6 +1,6 @@
 # Smart Playwright Protocol (SPP)
 
-AI-assisted Playwright testing through an interactive TypeScript CLI, with agent skills, MCP tools, Page Objects and task-level verification.
+An interactive terminal CLI for AI-assisted Playwright testing, combining agents, browser and trace skills, Model Context Protocol (MCP) tools and task verification.
 
 [![Verify](https://github.com/yashwant-das/ai-ts-playwright-protocol/actions/workflows/verify.yml/badge.svg)](https://github.com/yashwant-das/ai-ts-playwright-protocol/actions/workflows/verify.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -9,15 +9,15 @@ AI-assisted Playwright testing through an interactive TypeScript CLI, with agent
 
 ## Why it exists
 
-AI-generated tests need a clear link to the requested behavior, maintainable selectors and a repeatable way to verify the result. Smart Playwright Protocol gives that work a file-backed lifecycle: understand the requirement, explore the app, plan scenarios, generate tests, promote selectors into Page Objects, then verify and recover from failures.
+AI-generated tests need a clear link to the requested behavior, maintainable selectors and a repeatable way to verify the result. SPP records the requirement and acceptance criteria in a Markdown task, links the test plan and implementation, and runs a shared completion gate.
 
-SPP builds on Playwright's [planner, generator and healer agents](https://playwright.dev/docs/test-agents). Browser and trace skills guide the assistant's exploration and debugging. MCP tools give agents access to browser/test operations and let a configured assistant manage SPP tasks through the same verification gate as the CLI.
+It builds on Playwright's [planner, generator and healer agents](https://playwright.dev/docs/test-agents). The assistant uses browser and trace skills to explore and debug, promotes generated selectors into Page Objects, and verifies the task through the terminal CLI or lifecycle MCP tools.
 
 ## What this demonstrates
 
 | Engineering capability | Implementation in this repository |
 | --- | --- |
-| Interactive developer workflow | A [TypeScript CLI](scripts/task.ts) built with `@clack/prompts`: task menu, creation wizard, status board, clipboard handoff and guided verification/recovery output |
+| Interactive developer workflow | A [terminal CLI written in TypeScript](scripts/task.ts) built with `@clack/prompts`: task menu, creation wizard, status board, clipboard handoff and guided verification/recovery output |
 | AI-assisted test development | Version-matched planner, generator and healer [agent definitions](.github/agents/) for turning requirements into plans, executable tests and repair attempts |
 | Agent skills for exploration and debugging | Committed [playwright-cli](.agents/skills/playwright-cli/SKILL.md) and [playwright-trace](.agents/skills/playwright-trace/SKILL.md) skills covering browser sessions, locator generation and trace investigation |
 | MCP integration | Playwright Test MCP supplies browser/test tools to the agents; the TypeScript [SPP lifecycle MCP server](mcp/server.ts) exposes task creation, activation, verification, board listing and dependency queries |
@@ -26,151 +26,129 @@ SPP builds on Playwright's [planner, generator and healer agents](https://playwr
 
 ## Interactive CLI
 
-Run `npm run task` in a terminal to open the menu: activate or resume work, verify
-the active task, view the board, inspect blocked tasks or create a task through
-the guided wizard. You can also go directly to a task with `npm run task <TASK_ID>`.
-
-Activation excerpt for a task in `TODO`:
+Run `npm run task` in a terminal. Use the arrow keys to choose an action and Enter to confirm:
 
 ```text
-❯ npm run task T-005
+❯ npm run task
 ┌   SPP  Smart Playwright Protocol v3.0.0
 │
-●  T-005 Verify Footer Social Links TODO · activate
-│
-◆  T-005 TODO → IN PROGRESS
-│
-●  Handoff prompt · copied to clipboard ✓
-
-Read docs/protocol.md
-
-Task: T-005 Verify Footer Social Links
-Task file: tasks/T-005_Footer.md
+◆  What would you like to do?
+│  ● Activate or resume next task
+│  ○ Verify current active task
+│  ○ Show task board
+│  ○ Show blocked tasks
+│  ○ Create a new task
+│  ↑/↓ to navigate • Enter: confirm
+└
 ```
 
-The printed prompt continues with the protocol steps and the verification command.
-Paste it into your AI assistant, then run the task command again when the test is
-ready. Verification shows each gate's progress and result; failures include error
-excerpts and a recovery prompt. The CLI prints the handoff even when clipboard
-access is unavailable and uses plain output without interactive prompts when
-piped or run in CI. See the [CLI reference](docs/development.md#interactive-and-non-interactive-output)
-for command behavior.
+The creation wizard validates task IDs and collects the requirement details. The board shows task states, block reasons and a suggested next command. Activating a task prints the protocol handoff and copies it to the clipboard when available. Verification reports gate progress and results; failures include error excerpts and recovery guidance.
 
 ## Architecture
 
 ```mermaid
-flowchart LR
-    Dev[You] -->|npm run task create / next| CLI[Task CLI<br/>scripts/task.ts]
-    CLI --> Tasks[(tasks/*.md<br/>state + plan)]
+flowchart TB
+    Dev[Developer] --> CLI[Interactive terminal CLI]
     CLI -->|handoff prompt| AI[AI assistant]
-    AI -->|reads| Protocol[docs/protocol.md<br/>AGENTS.md]
-    AI -->|explores via| PWCLI[Playwright Agent CLI<br/>+ skills]
-    AI -->|delegates to| Agents[Playwright Test Agents<br/>planner / generator / healer]
-    Agents -->|plans| Specs[(specs/*.plan.md)]
-    Agents -->|uses| TestMCP[Playwright Test MCP<br/>browser and test tools]
-    TestMCP -->|executes and debugs| Code
-    AI -->|updates state| SPPMCP[SPP lifecycle MCP<br/>mcp/server.ts]
+    AI --> Skills[Browser and trace skills]
+    AI --> Agents[Planner, generator, healer]
+    Agents --> PWMCP[Playwright Test MCP]
+    Agents --> Code[Tests, fixtures and Page Objects]
+    AI --> SPPMCP[SPP lifecycle MCP]
+    CLI --> Tasks[Markdown tasks and plans]
     SPPMCP --> Tasks
-    Agents -->|draft tests| Code[pages/ + tests/]
-    AI -->|promotes selectors<br/>into Page Objects| Code
-    CLI -->|npm run task T-001| Gate{Verification gate<br/>files, no fixme/skip,<br/>lint, tests}
+    CLI --> Gate[Shared verification gate]
+    SPPMCP --> Gate
     Code --> Gate
-    Gate -->|pass| Done[DONE]
-    Gate -->|fail| Blocked[BLOCKED, then recover<br/>healer, --debug=cli, trace]
+    Gate --> Result[DONE or BLOCKED]
 ```
 
-The assistant uses Playwright skills and agents to explore the application, produce a scenario plan and generate tests. Page Objects and fixtures provide the shared test architecture. The healer and trace skill support failure investigation, while the verification gate records the task result.
+Playwright Test MCP supplies browser and test tools to the agents. SPP lifecycle MCP exposes task creation, activation, verification, board listing and dependency queries. Both SPP interfaces use the shared gate; the assistant works from the task and its scenario plan. The [protocol guide](docs/protocol.md) covers the full lifecycle and component boundaries.
 
-The two MCP integrations serve different roles: **Playwright Test MCP** provides the agents' browser and test tools; **SPP lifecycle MCP** exposes the repository's task workflow to a configured assistant. The CLI offers the same task operations through terminal commands. See the [protocol guide](docs/protocol.md) for component boundaries and the [development guide](docs/development.md#playwright-agent-tooling) for assistant setup.
+### Tech stack
 
-Every task follows one workflow:
+Exact dependency versions are in the [manifest](package.json) and [lockfile](package-lock.json); the runtime is pinned in [.nvmrc](.nvmrc).
+
+| Layer | Tool | Version | Purpose |
+| --- | --- | --- | --- |
+| Runtime | Node.js | 24.22.1 | Local and CI baseline |
+| Browser automation | Playwright Test, CLI, agents and skills | 1.64.1 | Exploration, test execution, generation and debugging |
+| Language | TypeScript | 6.0.3 | Typed tests, Page Objects and task tooling |
+| Interactive terminal | @clack/prompts | 1.8.1 | Menus, wizard prompts, progress and results |
+| CLI execution | ts-node | 10.9.2 | Runs the TypeScript task entrypoint |
+| Lifecycle MCP | Model Context Protocol SDK | 1.32.2 | Exposes SPP task tools to assistants |
+| Input validation | zod | 4.6.7 | MCP tool schemas |
+| Code lint | ESLint | 10.13.0 | Type-aware and Playwright rules |
+| Formatting | Prettier | 3.9.10 | Consistent code/config formatting |
+| Markdown lint | markdownlint-cli2 | 0.24.0 | Maintained documentation checks |
+| Git hooks | Husky | 9.1.7 | Installs repository hooks |
+| Staged checks | lint-staged | 17.6.0 | Runs checks on staged files |
+
+### Project structure
 
 ```text
-Select → Understand → Explore → Plan → Implement → Promote → Verify
-                                                              ├─ PASS → DONE
-                                                              └─ FAIL → BLOCKED → Recover → Verify
+├── docs/                       # Protocol, development guide and roadmap
+├── tasks/                      # Task objectives, criteria, dependencies and state
+├── specs/                      # Scenario plans linked to tasks
+├── pages/                      # Page Objects and shared components
+├── tests/                      # Live specs, fixtures, seeds, unit/ and smoke/
+├── scripts/                    # Task CLI, gate, agent regeneration and checks
+├── mcp/                        # SPP lifecycle MCP server
+├── types/                      # Task types
+├── .claude/ .github/agents/ .codex/ .opencode/ .agents/
+│                               # Generated agent definitions and skills
+├── AGENTS.md                   # Agent instructions; imported by CLAUDE.md
+├── playwright.config.ts        # Live suite
+└── playwright.smoke.config.ts  # Controlled loopback suite
 ```
 
 ## Quickstart
 
-Prerequisites: Node.js 24 (use the patch pinned in `.nvmrc`), and an AI assistant: Claude Code, VS Code / GitHub Copilot, Codex and OpenCode get ready-made Playwright Test Agents.
+Use the Node.js version in `.nvmrc`. The AI workflow supports Claude Code, VS Code / GitHub Copilot, Codex and OpenCode; follow the [assistant setup](docs/development.md#playwright-agent-tooling) for the chosen integration.
 
 ```bash
-git clone https://github.com/yashwant-das/ai-ts-playwright-protocol.git && cd ai-ts-playwright-protocol
+git clone https://github.com/yashwant-das/ai-ts-playwright-protocol.git
+cd ai-ts-playwright-protocol
 npm ci
 npx playwright install chromium
-cp .env.example .env     # BASE_URL defaults to https://www.saucedemo.com
-npm run check
+cp .env.example .env
 npm run test:smoke
-npm test                # live Sauce Demo suite
 ```
 
-The controlled smoke run reports two passing tests. A successful live run reports eight passing tests, including both seeds, against Sauce Demo. To work through a task with an assistant:
-
-```bash
-npm run task create      # interactive wizard, writes tasks/T-XXX_*.md
-npm run task next        # activates or resumes the next eligible task
-# paste the prompt into your assistant; it follows docs/protocol.md
-npm run task T-001       # runs the verification gate for that task
-```
-
-Playwright agent definitions and skills are committed for the supported assistants. Configure your assistant using the [setup notes](docs/development.md#playwright-agent-tooling); Codex and the GitHub Copilot coding agent need MCP setup outside the committed project files. After upgrading Playwright, run `npm run agents` to regenerate the definitions and skills.
-
-## Test reports and results
-
-- `npm run check`: offline lint, format, types, config/text validation, selector checks and unit tests; no browser or secrets required.
-- `npm run test:smoke`: two controlled Chromium tests against a loopback fixture; no public website access.
-- `npm test`: the eight live Sauce Demo tests. `npm run task <TASK_ID>` runs that task's completion gate and can update its state.
-- CI runs the offline checks, collects the live suite and executes controlled smoke tests on pushes and PRs to `main`.
-- `npx playwright show-report` opens the last live HTML report. Smoke reports are in `playwright-report/smoke`; CI retains failures for three days.
-
-The task gate checks declared files and skip/fixme source patterns, runs lint and executes the task's test file. Acceptance-criteria coverage and assertion quality remain part of review; [gate details](docs/protocol.md#phase-7--verify) describe the automated checks.
-
-The live suite targets public Sauce Demo by default; `BASE_URL` can override it. Locally, failing live tests get one retry; with `CI` set, they get two. A trace is captured on the first retry. Controlled smoke tests use the loopback fixture, have no retries and retain a trace on failure.
-
-## Tech stack
-
-Versions below match the committed [package manifest](package.json), [lockfile](package-lock.json) and [runtime pin](.nvmrc).
-
-| Layer | Tool | Version | Why |
-| --- | --- | --- | --- |
-| Runtime | Node.js | 24.22.1 | Shared local and CI baseline |
-| Test runner | Playwright Test | 1.64.1 | Auto-waiting locators, traces and an HTML report out of the box |
-| Agent tooling | Playwright Agent CLI, Test Agents, skills | 1.64.1 (bundled) | Browser exploration, scenario planning, test generation and failure investigation |
-| Language | TypeScript | 6.0.3 | Typed page objects and task schemas |
-| Task CLI | ts-node, @clack/prompts | 10.9.2, 1.8.1 | Interactive task creation and state changes |
-| MCP integration | Playwright Test MCP; Model Context Protocol SDK | 1.64.1; 1.32.2 | Browser/test tools for agents; SPP task tools for assistants |
-| Schema validation | zod | 4.6.7 | Validates MCP tool inputs |
-| Quality gates | ESLint, Prettier, markdownlint-cli2, Husky, lint-staged | 10.13.0, 3.9.10, 0.24.0, 9.1.7, 17.6.0 | Staged hooks, offline checks and controlled browser CI |
-
-## Project structure
-
-```text
-├── docs/            # protocol.md (source of truth), development.md, roadmap.md
-├── tasks/           # One Markdown file per task, with state and context
-├── specs/           # Test plans (planner output), linked from tasks
-├── pages/           # Page objects, including Components/
-├── tests/           # Live specs, fixtures and seeds; unit/ and controlled smoke/
-├── scripts/         # Task CLI, verification gate, agent regeneration, selector/text checks
-├── mcp/             # SPP lifecycle MCP server
-├── types/           # Task types
-├── .claude/ .github/agents/ .codex/ .opencode/ .agents/
-│                    # Generated Playwright agents and skills (npm run agents)
-├── AGENTS.md        # Short instructions for AI assistants (CLAUDE.md imports it)
-├── playwright.config.ts       # Live suite
-└── playwright.smoke.config.ts  # Controlled loopback suite
-```
+The controlled smoke run reports two passing Chromium tests against a local fixture.
 
 ## Usage
 
-Use `npm run task` for the interactive menu, `npm run task create` for the creation wizard and `npm run task status` for the task board. For task selection, verification, configuration and assistant setup, see the [development guide](docs/development.md).
+```bash
+npm run task             # interactive menu
+npm run task create      # guided creation wizard
+npm run task status      # task board
+npm run task T-005       # activate a TODO task, or verify an existing task
+```
+
+When a task is activated, paste the handoff prompt into your assistant. It follows the protocol: understand, explore, plan, implement and promote. Run the task command again when the test is ready to verify. The CLI offers a DONE confirmation in a terminal; non-interactive verification records DONE automatically after the gate passes.
+
+Run `npm run agents` after a Playwright upgrade to regenerate the committed definitions and skills. The [development guide](docs/development.md) covers task selection, assistant configuration and recovery.
+
+## Verification and reports
+
+| Command | What it verifies |
+| --- | --- |
+| `npm run check` | Offline lint, formatting, types, text/config validation, selector health and 16 unit tests |
+| `npm run test:smoke` | Two controlled Chromium checks using existing Page Objects and fixtures |
+| `npm test` | Eight live tests against Sauce Demo by default, including both seeds |
+| `npm run task <TASK_ID>` | Declared files and skip/fixme source patterns, lint and the task's test file; updates task state |
+
+CI runs the offline checks, live-suite collection and controlled smoke on pushes and PRs to `main`. Live tests use `BASE_URL` (default `https://www.saucedemo.com`) and run separately. Acceptance-criteria coverage and assertion quality remain part of review; see [gate boundaries](docs/protocol.md#phase-7--verify).
+
+Use `npx playwright show-report` for the live HTML report or `npx playwright show-report playwright-report/smoke` for the controlled report. Reports and results are ignored locally; CI retains smoke failure artifacts for three days. Retry and trace settings are in the [development guide](docs/development.md#quality-checks).
 
 ## Documentation
 
-- [docs/protocol.md](docs/protocol.md): workflow, states and rules
-- [docs/development.md](docs/development.md): command reference, agent and MCP setup, troubleshooting
-- [docs/roadmap.md](docs/roadmap.md): planned improvements
-- [AGENTS.md](AGENTS.md): instructions for AI assistants
+- [Protocol](docs/protocol.md): architecture, lifecycle, test rules and completion contract
+- [Development](docs/development.md): setup, interactive CLI, skills, MCP integrations and troubleshooting
+- [Roadmap](docs/roadmap.md): pending work and non-goals
+- [Agent instructions](AGENTS.md): operating rules for assistants
 
 ## License
 

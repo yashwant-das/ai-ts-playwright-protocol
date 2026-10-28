@@ -29,11 +29,11 @@ and do not broaden workflow permissions without explicit authorization.
 
 ## Mandatory Instructions
 
-Before starting any work:
+For SPP automation tasks:
 
 1. Read the Protocol: [docs/protocol.md](docs/protocol.md) is the architectural source of truth.
 2. Read the Task: read the active task file in `tasks/`.
-3. Use the Playwright tooling in this repo (all version-matched to `@playwright/test`):
+3. Use the Playwright tooling in this repo; regenerate definitions/skills after upgrades to match `@playwright/test`:
    - **Agent CLI:** `npx playwright cli` (skill: `playwright-cli`) for exploration and locators.
    - **Test Agents:** `playwright-test-planner`, `playwright-test-generator`, `playwright-test-healer`.
    - **Trace CLI:** `npx playwright trace` (skill: `playwright-trace`) to inspect failure traces.

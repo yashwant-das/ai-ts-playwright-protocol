@@ -1,6 +1,6 @@
 # Development guide
 
-`scripts/task.ts` is the local CLI that moves Markdown task files through the framework lifecycle. Use this document when you need exact command behavior, board usage, and configuration.
+Setup and operating reference for the interactive terminal CLI, Playwright agents and skills, and MCP integrations. The CLI is implemented in TypeScript in `scripts/task.ts`.
 
 > [!NOTE]
 > For first-time setup and onboarding, start with [README.md](../README.md). For the architectural source of truth (workflow, states, rules), see [protocol.md](protocol.md).
@@ -30,9 +30,7 @@ hooks if needed. Keep local credentials in ignored `.env` files.
 | `CI` | Unset locally | Live suite forbids focus, uses one worker and two retries when set |
 | Smoke target | `http://127.0.0.1:4173` | Fixed controlled fixture; does not read `.env` |
 
-Smoke and live configs write ignored reports and results. The lifecycle CLI/MCP
-write ignored logs and may change task files; avoid running task verification
-against historical tasks merely to check repository maintenance.
+Smoke and live configs write ignored reports/results. Task commands can change task state; use maintenance checks to verify the repository without activating or completing task records.
 
 ## Quality checks
 
@@ -41,7 +39,7 @@ npm run check                # offline checks and unit tests
 npm run test:smoke           # controlled Chromium tests, no public-site requests
 npx playwright test --list   # discover eight live tests, no browser execution
 npm test                    # live Sauce Demo suite
-npx lint-staged --diff HEAD  # check changed files without committing
+npx lint-staged --diff HEAD  # checks changes against HEAD; does not make a commit
 ```
 
 `npm run check` runs code/Markdown lint, formatter checks, TypeScript, config/text
@@ -64,7 +62,7 @@ error dismissal through the existing LoginPage. Browser requests outside the
 loopback origin fail. This validates SPP fixture/Page Object wiring, not the
 public application's implementation. Live tests require network access to the
 configured application and must be run separately for integration changes.
-Failure artifacts are retained for three days.
+Failure artifacts are retained for three days. Locally, the live suite retries failures once; with `CI` set, it retries twice and uses one worker. It captures a trace on the first retry, screenshots on failure and video retained on failure. Controlled smoke has no retries and retains failure traces. Open `playwright-report/` for live results or `playwright-report/smoke/` for controlled results.
 
 To add behavior, keep offline gate tests in `tests/unit/`, controlled browser
 checks in `tests/smoke/` and live specs directly under `tests/`. The live config
@@ -87,13 +85,7 @@ selectors in Page Objects and import browser fixtures from `tests/fixtures.ts`.
 
 ## Interactive Menu
 
-Run:
-
-```bash
-npm run task
-```
-
-Available menu actions:
+Run `npm run task`, use ↑/↓ to select an action, then press Enter:
 
 | Action | Behavior |
 | :--- | :--- |
@@ -121,9 +113,9 @@ Exit codes: `0` on success, `1` when verification fails, the task is not found, 
 
 ## Task Creation Wizard
 
-Run `npm run task create` to start the interactive task generator. It prompts for:
+Choose **Create a new task** in the menu or run `npm run task create`. Invalid IDs and empty titles keep the prompt open with a validation message; cancelling exits without creating a task. The wizard collects:
 
-- **Task ID**: Must follow `T-###`.
+- **Task ID**: Must follow `T-###` (for example, `T-011`).
 - **Title**: Descriptive name for the task.
 - **Page Object**: (Optional) The target Page Object name.
 - **Test File**: (Optional) The target spec file path.
@@ -140,15 +132,32 @@ When a task is activated or verification fails, the runner generates a prompt fo
 
 Generated when a task moves to `IN_PROGRESS`. Includes the task file path and the SPP phases, with the Playwright tool to use for each (CLI or planner for Explore/Plan, generator for Implement, then Promote and Verify).
 
+Activation excerpt for a TODO task:
+
+```text
+❯ npm run task T-005
+┌   SPP  Smart Playwright Protocol v3.0.0
+│
+●  T-005 Verify Footer Social Links TODO · activate
+│
+◆  T-005 TODO → IN PROGRESS
+│
+●  Handoff prompt · copied to clipboard ✓
+
+Read docs/protocol.md
+
+Task: T-005 Verify Footer Social Links
+Task file: tasks/T-005_Footer.md
+```
+
+The prompt continues with the protocol steps and `npm run task T-005` as the verification command. Clipboard failure leaves the complete prompt available in terminal output.
+
 ### Repair Prompt
 
 Generated when verification fails and the task moves to `BLOCKED`.
 
 - `verification`: points the agent to `logs/last_run.log` and the recovery tools (healer agent, `--debug=cli`, trace CLI) and asks for the smallest possible fix.
 - `regression`: the test contains `test.fixme()`. The prompt asks the agent to stop and get a human decision before changing anything.
-
-> [!TIP]
-> After activating a task or seeing a failure, simply switch to your AI assistant's chat and paste (Ctrl+V/Cmd+V) to provide all necessary context.
 
 ## Task Board & Status
 
@@ -162,35 +171,19 @@ Generated when verification fails and the task moves to `BLOCKED`.
 
 The runner verifies `IN_PROGRESS` and `BLOCKED` tasks and can re-verify `DONE` tasks. A `TODO` task is activated first.
 
-### Command
-
-```bash
-npm run task <TASK_ID>
-```
-
-Example:
-
-```bash
-npm run task T-011
-```
-
-The gate runs, in order:
+Run `npm run task <TASK_ID>` (for example, `npm run task T-011`). The gate runs, in order:
 
 1. **Static checks**: the declared `Test File` exists; the declared `Spec` (if any) exists; the test file has no `test.fixme()` (→ `BLOCKED`, `regression`) or `test.skip()` (→ `BLOCKED`, `verification`).
 2. `npm run lint`: ESLint, including the rule that rejects `page.getBy*()`, `page.locator()` and selector-string page actions in `.spec.ts` files, plus markdownlint.
 3. `npm test <declared-test-file>`.
 
-The task gate runs lint and the declared test, not the full `npm run check`
-maintenance command. It scans skip/fixme calls in the declared source and uses
-the test command exit code; it does not prove semantic coverage or inspect every
-imported/runtime skip. Review acceptance criteria before running the gate: a
-successful DONE write checks off their boxes automatically.
+Review acceptance criteria before verification: a DONE status write checks off their boxes automatically. See the [protocol gate boundaries](protocol.md#phase-7--verify) for the distinction between automated checks and review obligations.
 
 The block reason is written to the task's front-matter.
 
 ### Protocol Enforcement
 
-If you attempt to activate a new `TODO` task while another task is currently `IN_PROGRESS`, the CLI will detect a protocol violation. To prioritize developer experience while maintaining the SPP "one-task-at-a-time" rule, the CLI will interactively ask if you want to **park** the current active task (safely reverting it to `TODO`) before promoting your new urgent task.
+When a different task is already `IN_PROGRESS`, activating a TODO task asks whether to park the active task back in TODO. Piped/CI execution refuses that switch. Finish the active task or make the parking decision in a terminal.
 
 ### Logs
 
@@ -371,8 +364,8 @@ Playwright 1.64.1 and its matching Chromium build passed the existing eight live
 tests and the two controlled tests. Its generated agents/skills were refreshed
 with `npm run agents`, preserving the customized Copilot workflow.
 
-TypeScript 7.0.2 is available but outside typescript-eslint 8.72.1's declared
-`>=4.8.4 <6.1.0` compatibility range. Use 6.0.3, the latest supported stable line;
+TypeScript 7 was excluded at adoption because typescript-eslint 8.72.1 declares
+`>=4.8.4 <6.1.0` compatibility. The lockfile uses TypeScript 6.0.3;
 owner: Yashwant Das; review when the parser supports TypeScript 7. ESLint 10 and
 JSDoc 65 satisfy their declared peers and pass the maintained code checks.
 NodeNext resolution supports current ESM dependency interop from the existing
@@ -383,7 +376,7 @@ Compatible audit fixes removed the high/critical findings. npm audit still
 reports four low-severity entries in one transitive chain:
 markdownlint-cli2 → markdownlint → micromark-extension-math → KaTeX
 ([GHSA-238p-pmpm-9mq7](https://github.com/advisories/GHSA-238p-pmpm-9mq7)).
-The latest markdownlint-cli2 release still resolves the affected dependency.
+At that review, markdownlint-cli2 0.24.0 still resolved the affected dependency.
 The reported automatic fix downgrades the Markdown tool to 0.16.0; it was not
 applied. The dependency is a local/CI development tool, not a hosted application.
 Treat this as an unresolved dependency review, not an approved exception or a
@@ -403,17 +396,9 @@ Local checks on 2026-10-28 under Node 24.22.1:
 | Live Sauce Demo | 8 tests pass; no skipped tests; this is separate from controlled CI evidence |
 | Actual commit hooks | 18 disposable-repository probes pass, including invalid inputs, hard waits, filenames with spaces, deletions, generated-plan exclusion, unrelated unstaged Markdown/config and partial Markdown/TypeScript preservation |
 
-Clean `npm ci` in a disposable checkout also passed offline checks, both controlled
-tests, all eight live tests and CLI help under Node 24.22.1. Both Mermaid diagrams
-rendered in Chromium and were visually inspected; 26 maintained local links and
-anchors resolved. MCP initialization, discovery of five tools and read-only
-`list_tasks` succeeded with the refreshed SDK.
+Clean `npm ci` in a disposable checkout passed the offline checks, both controlled tests, all eight live tests and CLI help under Node 24.22.1. MCP initialization, discovery of five tools and read-only `list_tasks` also passed. Mermaid diagrams and maintained local links are checked after documentation changes.
 
-Fresh whole-change review identified one removed hard-wait gate outside specs;
-real-file ESLint tests reproduced it before the fix and pass afterward. Global
-hard-wait/networkidle rules now cover maintained TypeScript, with locator rules
-remaining spec-specific. The reviewer verified the fix; no other actionable
-findings remained.
+Interactive terminal review confirmed all five menu choices, the status board and blocked-task guidance, invalid-ID validation and cancellation without task creation.
 
 Selector dates older than 90 days remain advisory warnings; this adoption does
 not rewrite metadata to imply a new manual locator review. Hosted CI is separate
@@ -421,7 +406,7 @@ from local evidence and must pass on the PR revision before merge.
 
 ### Repository settings requiring owner review
 
-The repository is public. The active `default-branch-protection` ruleset prevents
+Audit snapshot: 2026-10-28. The repository is public. The active `default-branch-protection` ruleset prevents
 deletion and non-fast-forward updates only. The legacy branch-protection endpoint
 returns 404, and the ruleset has no required checks. Proposed required checks:
 `Quality and unit tests` and `Controlled Chromium smoke`. Workflow presence alone
@@ -433,6 +418,6 @@ found`), with a scope notice; no enabled scanning or alert-free claim is made.
 Propose enabling supported secret/code scanning and security updates after owner
 review. No repository/account settings were changed by this adoption.
 
-Proposed public metadata, not applied: description
-“Guides Playwright and TypeScript agents through Markdown tasks and verified Page Object tests”;
-topics: `ai-testing`, `typescript`, `playwright`, `mcp`, `ai-agents`.
+Repository description/topics also require owner review against the metadata
+standard: a description of at most 110 characters and at most eight topics in
+category/language/tool order. No public metadata was changed.
